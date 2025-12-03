@@ -15,7 +15,9 @@ Agent-modifiable training infrastructure. nanoGPT base, reference-grade, maximum
 | Cherry-pick Modules | done | foundry-modules |
 | Integration Test | done | foundry-test |
 | Data Prep | done | foundry-data |
-| Training Validation | pending | foundry-train |
+| Training Compat (P0) | done | planner-test |
+| Tiny Config | done | foundry-train |
+| Compare Harness (P1) | in_progress | planner-test |
 | Architecture Mutations | pending | foundry-mutate |
 
 ## Decision Log
@@ -56,10 +58,15 @@ foundry/
 
 ## Commit Style
 
-TITLE ONLY. SHORT. Examples:
-- `add nanoGPT model.py`
-- `add RoPE module`
-- `fix attention mask`
+Format: `tag: Title case short`
+
+Tags: `feat:`, `fix:`, `refactor:`, `docs:`, `test:`
+
+Examples:
+- `feat: Add nanoGPT model`
+- `feat: Add RoPE module`
+- `fix: Attention mask shape`
+- `refactor: Extract training config`
 
 ## Blockers
 

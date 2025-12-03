@@ -27,7 +27,10 @@ import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 
-from model import GPTConfig, GPT
+# model imports - dynamic based on --model flag
+model_module = None
+GPTConfig = None
+GPT = None
 
 # -----------------------------------------------------------------------------
 # default config values designed to train a gpt2 (124M) on OpenWebText
@@ -49,8 +52,10 @@ gradient_accumulation_steps = 5 * 8 # used to simulate larger batch sizes
 batch_size = 12 # if gradient_accumulation_steps > 1, this is the micro-batch size
 block_size = 1024
 # model
+model = 'v1' # 'v1' (nanoGPT baseline) or 'v2' (RoPE+GQA+RMSNorm+SwiGLU)
 n_layer = 12
 n_head = 12
+n_kv_head = 4 # only used for v2 (GQA)
 n_embd = 768
 dropout = 0.0 # for pretraining 0 is good, for finetuning try 0.1+
 bias = False # do we use bias inside LayerNorm and Linear layers?
@@ -143,9 +148,19 @@ if os.path.exists(meta_path):
     meta_vocab_size = meta['vocab_size']
     print(f"found vocab_size = {meta_vocab_size} (inside {meta_path})")
 
+# dynamic model import
+if model == 'v1':
+    from model import GPTConfig, GPT
+elif model == 'v2':
+    from model_v2 import GPTConfig, GPT
+else:
+    raise ValueError(f"unknown model: {model}")
+
 # model init
 model_args = dict(n_layer=n_layer, n_head=n_head, n_embd=n_embd, block_size=block_size,
-                  bias=bias, vocab_size=None, dropout=dropout) # start with model_args from command line
+                  bias=bias, vocab_size=None, dropout=dropout)
+if model == 'v2':
+    model_args['n_kv_head'] = n_kv_head
 if init_from == 'scratch':
     # init a new model from scratch
     print("Initializing a new model from scratch")
