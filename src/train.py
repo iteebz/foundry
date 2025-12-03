@@ -27,6 +27,8 @@ import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 
+from eval import evaluate
+
 # model imports - dynamic based on --model flag
 model_module = None
 GPTConfig = None
@@ -204,18 +206,6 @@ elif init_from == 'resume':
     model.load_state_dict(state_dict)
     iter_num = checkpoint['iter_num']
     best_val_loss = checkpoint['best_val_loss']
-elif init_from.startswith('gpt2'):
-    print(f"Initializing from OpenAI GPT-2 weights: {init_from}")
-    # initialize from OpenAI GPT-2 weights
-    override_args = dict(dropout=dropout)
-    model = GPT.from_pretrained(init_from, override_args)
-    # read off the created config params, so we can store them into checkpoint correctly
-    for k in ['n_layer', 'n_head', 'n_embd', 'block_size', 'bias', 'vocab_size']:
-        model_args[k] = getattr(model.config, k)
-# crop down the model block size if desired, using model surgery
-if block_size < model.config.block_size:
-    model.crop_block_size(block_size)
-    model_args['block_size'] = block_size # so that the checkpoint will have the right value
 model.to(device)
 
 # initialize a GradScaler. If enabled=False scaler is a no-op
@@ -277,7 +267,6 @@ X, Y = get_batch('train') # fetch the very first batch
 t0 = time.time()
 local_iter_num = 0 # number of iterations in the lifetime of this process
 raw_model = model.module if ddp else model # unwrap DDP container if needed
-running_mfu = -1.0
 while True:
 
     # determine and set the learning rate for this iteration
@@ -295,7 +284,6 @@ while True:
                 "train/loss": losses['train'],
                 "val/loss": losses['val'],
                 "lr": lr,
-                "mfu": running_mfu*100, # convert to percentage
             })
         if losses['val'] < best_val_loss or always_save_checkpoint:
             best_val_loss = losses['val']
@@ -347,16 +335,24 @@ while True:
         # get loss as float. note: this is a CPU-GPU sync point
         # scale up to undo the division above, approximating the true total loss (exact would have been a sum)
         lossf = loss.item() * gradient_accumulation_steps
-        if local_iter_num >= 5: # let the training loop settle a bit
-            mfu = raw_model.estimate_mfu(batch_size * gradient_accumulation_steps, dt)
-            running_mfu = mfu if running_mfu == -1.0 else 0.9*running_mfu + 0.1*mfu
-        print(f"iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.2f}ms, mfu {running_mfu*100:.2f}%")
+        print(f"iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.2f}ms")
     iter_num += 1
     local_iter_num += 1
 
     # termination conditions
     if iter_num > max_iters:
         break
+
+# final evaluation
+if master_process:
+    results = evaluate(raw_model, get_batch, max_iters=eval_iters, device=device, ctx=ctx)
+    print(f"\nFinal evaluation: loss={results['loss']:.4f}, perplexity={results['perplexity']:.2f}")
+    
+    # save results alongside checkpoint
+    eval_path = os.path.join(out_dir, 'final_eval.txt')
+    with open(eval_path, 'w') as f:
+        f.write(f"loss: {results['loss']}\n")
+        f.write(f"perplexity: {results['perplexity']}\n")
 
 if ddp:
     destroy_process_group()
