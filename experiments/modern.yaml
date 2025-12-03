@@ -1,0 +1,17 @@
+name: "modern_v2"
+base_model: "v2"
+
+training:
+  max_iters: 5000
+  learning_rate: 6e-4
+  dataset: "shakespeare_char"
+  eval_interval: 500
+  compile: false
+
+model_args:
+  n_layer: 6
+  n_head: 6
+  n_kv_head: 2
+  n_embd: 384
+  dropout: 0.0
+  bias: false

@@ -17,30 +17,37 @@ Agent-modifiable training infrastructure. nanoGPT base, reference-grade, maximum
 | Data Prep | done | foundry-data |
 | Training Compat (P0) | done | planner-test |
 | Tiny Config | done | foundry-train |
-| Compare Harness (P1) | in_progress | planner-test |
+| Compare Harness (P1) | done | planner-test |
+| Mutation Framework | done | zealot-foundry-mutations |
 | Architecture Mutations | pending | foundry-mutate |
 
 ## Decision Log
 
-- 2024-12-03: nanoGPT > HF Llama (10:1 complexity, 100% mutable)
-- 2024-12-03: Cherry-pick RoPE/GQA/RMSNorm/SwiGLU as standalone modules
-- 2024-12-03: CWD injection fix applied to spawn context (prevents agent directory confusion)
-- 2024-12-03: Shakespeare char-level for training validation (minimal, CPU-friendly)
+- 2025-12-03: nanoGPT > HF Llama (10:1 complexity, 100% mutable)
+- 2025-12-03: Cherry-pick RoPE/GQA/RMSNorm/SwiGLU as standalone modules
+- 2025-12-03: CWD injection fix applied to spawn context (prevents agent directory confusion)
+- 2025-12-03: Shakespeare char-level for training validation (minimal, CPU-friendly)
+- 2025-12-03: MPS device detection fix (was mapping to CPU)
+- 2025-12-03: Mutation YAML framework: experiments/*.yaml → model_factory.py → train.py
 
 ## Architecture
 
 ```
 foundry/
-├── docs/specification/vision.md  # done
+├── docs/experiments/oplot-foundry.md
+├── experiments/
+│   ├── baseline.yaml   # v1 config
+│   └── modern.yaml     # v2 config
 ├── src/
-│   ├── model.py      # nanoGPT base (330 lines)
-│   ├── model_v2.py   # modern modules integrated
-│   ├── train.py      # nanoGPT training (336 lines)
+│   ├── model.py        # nanoGPT base (330 lines)
+│   ├── model_v2.py     # modern modules integrated
+│   ├── model_factory.py # YAML → model loader
+│   ├── train.py        # nanoGPT training (--experiment flag)
 │   └── modules/
-│       ├── rope.py   # RoPE (52 lines)
-│       ├── gqa.py    # GQA (44 lines)
-│       ├── rmsnorm.py # RMSNorm (20 lines)
-│       └── swiglu.py # SwiGLU (23 lines)
+│       ├── rope.py     # RoPE (52 lines)
+│       ├── gqa.py      # GQA (44 lines)
+│       ├── rmsnorm.py  # RMSNorm (20 lines)
+│       └── swiglu.py   # SwiGLU (23 lines)
 └── tests/
     ├── test_modules.py
     └── test_integration.py  # 6 tests passing

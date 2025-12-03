@@ -52,6 +52,7 @@ gradient_accumulation_steps = 5 * 8 # used to simulate larger batch sizes
 batch_size = 12 # if gradient_accumulation_steps > 1, this is the micro-batch size
 block_size = 1024
 # model
+experiment = '' # path to experiment YAML config (overrides model/n_layer/n_head/etc)
 model = 'v1' # 'v1' (nanoGPT baseline) or 'v2' (RoPE+GQA+RMSNorm+SwiGLU)
 n_layer = 12
 n_head = 12
@@ -149,6 +150,16 @@ if os.path.exists(meta_path):
     print(f"found vocab_size = {meta_vocab_size} (inside {meta_path})")
 
 # dynamic model import
+if experiment:
+    from model_factory import get_model_from_experiment
+    experiment_model, experiment_model_args = get_model_from_experiment(experiment)
+    model = experiment_model
+    for key, val in experiment_model_args.items():
+        globals()[key] = val
+    print(f"Loading model from experiment: {experiment}")
+    print(f"  Model: {model}")
+    print(f"  Args: {experiment_model_args}")
+
 if model == 'v1':
     from model import GPTConfig, GPT
 elif model == 'v2':
