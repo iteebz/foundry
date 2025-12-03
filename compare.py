@@ -5,6 +5,7 @@ Runs two models (baseline + mutation) on same dataset, logs loss curves, compute
 """
 import argparse
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -36,29 +37,16 @@ def run_training(model: str, dataset: str, iters: int, out_dir: str, extra_args:
         sys.exit(1)
     
     # Parse final validation loss from output
-    lines = result.stdout.strip().split('\n')
     val_loss = None
     train_loss = None
     
-    for line in reversed(lines):
-        if 'val loss' in line and val_loss is None:
-            parts = line.split()
-            for i, part in enumerate(parts):
-                if part == 'loss' and i > 0:
-                    try:
-                        val_loss = float(parts[i-1])
-                        break
-                    except ValueError:
-                        continue
-        if 'train loss' in line and train_loss is None:
-            parts = line.split()
-            for i, part in enumerate(parts):
-                if 'loss' in part and i > 0:
-                    try:
-                        train_loss = float(parts[i+1].rstrip(':,'))
-                        break
-                    except (ValueError, IndexError):
-                        continue
+    for line in reversed(result.stdout.strip().split('\n')):
+        if val_loss is None or train_loss is None:
+            match = re.search(r'train loss ([\d.]+).*val loss ([\d.]+)', line)
+            if match:
+                train_loss = float(match.group(1))
+                val_loss = float(match.group(2))
+                break
     
     return {
         "model": model,

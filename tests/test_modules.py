@@ -1,6 +1,7 @@
 import sys
 import torch
-sys.path.insert(0, '/Users/teebz/space/repos/foundry/src')
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
 from modules.rmsnorm import RMSNorm
 from modules.rope import RotaryEmbedding, apply_rotary_emb
