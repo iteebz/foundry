@@ -14,6 +14,7 @@ from modules.swiglu import SwiGLU
 from modules.gelu import GELU
 from modules.glu import GLU
 from modules.gqa import GroupedQueryAttention
+from modules.mla import MultiLatentAttention
 from modules.focal_loss import FocalLoss
 from modules.label_smoothing import LabelSmoothingCrossEntropy
 
@@ -27,21 +28,35 @@ class CausalSelfAttention(nn.Module):
         self.head_dim = config.n_embd // config.n_head
         self.use_rope = config.position_encoding == 'rope'
         self.use_alibi = config.position_encoding == 'alibi'
+        self.use_mla = config.attention_type == 'mla'
         
-        self.gqa = GroupedQueryAttention(
-            config.n_embd,
-            config.n_head,
-            config.n_kv_head,
-            bias=config.bias,
-            dropout=config.dropout
-        )
-        
-        if self.use_rope:
-            self.rope = RotaryEmbedding(self.head_dim, max_seq_len=config.block_size)
-        elif self.use_alibi:
-            self.alibi = ALiBi(config.n_head, max_seq_len=config.block_size)
+        if self.use_mla:
+            self.mla = MultiLatentAttention(
+                config.n_embd,
+                config.n_head,
+                latent_dim=getattr(config, 'mla_latent_dim', config.n_embd // 2),
+                bias=config.bias,
+                dropout=config.dropout,
+                block_size=config.block_size
+            )
+        else:
+            self.gqa = GroupedQueryAttention(
+                config.n_embd,
+                config.n_head,
+                config.n_kv_head,
+                bias=config.bias,
+                dropout=config.dropout
+            )
+            
+            if self.use_rope:
+                self.rope = RotaryEmbedding(self.head_dim, max_seq_len=config.block_size)
+            elif self.use_alibi:
+                self.alibi = ALiBi(config.n_head, max_seq_len=config.block_size)
 
     def forward(self, x):
+        if self.use_mla:
+            return self.mla(x)
+        
         B, T, C = x.size()
         
         q = self.gqa.q_proj(x).view(B, T, self.n_head, self.head_dim).transpose(1, 2)
@@ -106,6 +121,8 @@ class GPTConfig:
     activation: str = 'swiglu'
     position_encoding: str = 'rope'
     loss_type: str = 'cross_entropy'
+    attention_type: str = 'gqa'
+    mla_latent_dim: int = None
 
 class GPT(nn.Module):
     def __init__(self, config):

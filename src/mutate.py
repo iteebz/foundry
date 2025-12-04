@@ -345,6 +345,30 @@ def mutate_conversation_format(
     return config
 
 
+def mutate_mla(
+    latent_dim: Optional[int] = None,
+    base_config: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Generate MLA (Multi-Latent Attention) mutation.
+    
+    Args:
+        latent_dim: Latent compression dimension (default: n_embd // 2)
+    """
+    config = base_config or load_baseline()
+    
+    if latent_dim is None:
+        n_embd = config.get("model_args", {}).get("n_embd", 384)
+        latent_dim = n_embd // 2
+    
+    config["name"] = f"mla_latent{latent_dim}"
+    if "model_args" not in config:
+        config["model_args"] = {}
+    config["model_args"]["attention_type"] = "mla"
+    config["model_args"]["mla_latent_dim"] = latent_dim
+    
+    return config
+
+
 def save_mutation(config: Dict[str, Any], output_dir: str = "experiments") -> Path:
     """Save mutation config to YAML."""
     output_path = Path(output_dir) / f"{config['name']}.yaml"
@@ -390,6 +414,7 @@ def generate_sweep(
         "lora_alpha": mutate_lora_alpha,
         "lora_dropout": mutate_lora_dropout,
         "conversation_format": mutate_conversation_format,
+        "mla": mutate_mla,
     }
     
     if mutation_type not in mutation_funcs:
@@ -410,17 +435,17 @@ def generate_sweep(
 if __name__ == "__main__":
     import sys
     
-    if len(sys.argv) < 3:
-        print("Usage: python -m src.mutate <type> <variant>")
+    if len(sys.argv) < 2:
+        print("Usage: python -m src.mutate <type> [variant]")
         print("Types: attention, depth, width, lr, norm, activation, position, loss,")
         print("       batch_size, warmup, grad_clip, weight_decay, adam_betas,")
-        print("       lora_rank, lora_alpha, lora_dropout, conversation_format")
+        print("       lora_rank, lora_alpha, lora_dropout, conversation_format, mla")
         print("\nExamples:")
         print("  python -m src.mutate attention gqa_2kv")
         print("  python -m src.mutate depth 8")
         print("  python -m src.mutate lr 3e-4")
         print("  python -m src.mutate lora_rank 16")
-        print("  python -m src.mutate conversation_format chatml")
+        print("  python -m src.mutate mla 192")
         sys.exit(1)
     
     mutation_type = sys.argv[1]
@@ -462,6 +487,9 @@ if __name__ == "__main__":
         config = mutate_lora_dropout(float(sys.argv[2]))
     elif mutation_type == "conversation_format":
         config = mutate_conversation_format(sys.argv[2])
+    elif mutation_type == "mla":
+        latent_dim = int(sys.argv[2]) if len(sys.argv) > 2 else None
+        config = mutate_mla(latent_dim)
     else:
         print(f"Unknown mutation type: {mutation_type}")
         sys.exit(1)
