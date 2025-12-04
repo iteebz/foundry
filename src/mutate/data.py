@@ -51,3 +51,39 @@ def mutate_conversation_format(
     config["data"]["conversation_format"] = format_type
 
     return config
+
+
+def mutate_curriculum(
+    strategy: str = "length",
+    schedule: str = "linear",
+    num_stages: int = 4,
+    base_config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Generate curriculum learning mutations.
+    
+    Args:
+        strategy: Difficulty scoring ('length' or 'perplexity')
+        schedule: Curriculum schedule ('linear' or 'step')
+        num_stages: Number of curriculum stages
+    """
+    config = base_config or load_baseline()
+
+    strategies = ["length", "perplexity"]
+    if strategy not in strategies:
+        raise ValueError(f"Unknown strategy: {strategy}. Choose from {strategies}")
+
+    schedules = ["linear", "step"]
+    if schedule not in schedules:
+        raise ValueError(f"Unknown schedule: {schedule}. Choose from {schedules}")
+
+    config["name"] = f"curriculum_{strategy}_{schedule}_{num_stages}stages"
+    if "data" not in config:
+        config["data"] = {}
+    config["data"]["curriculum"] = {
+        "enabled": True,
+        "strategy": strategy,
+        "schedule": schedule,
+        "num_stages": num_stages,
+    }
+
+    return config

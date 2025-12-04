@@ -20,6 +20,7 @@ from .core import (
 )
 from .data import (
     mutate_conversation_format,
+    mutate_curriculum,
     mutate_data_filter,
 )
 from .training import (
@@ -60,4 +61,5 @@ __all__ = [
     "mutate_lora_dropout",
     "mutate_data_filter",
     "mutate_conversation_format",
+    "mutate_curriculum",
 ]
