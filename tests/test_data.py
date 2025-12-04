@@ -1,12 +1,13 @@
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 import tempfile
-from data.tokenize import CharTokenizer
+
 from data.filter import dedupe, length_filter
-from data.pack import pack_to_bin, load_bin, prepare_dataset
+from data.pack import load_bin, pack_to_bin, prepare_dataset
+from data.tokenize import CharTokenizer
 
 
 def test_char_tokenizer():
@@ -53,8 +54,8 @@ def test_prepare_dataset():
         out_dir = Path(tmpdir)
         text = "hello world" * 100
         result = prepare_dataset(text, out_dir)
-        assert result['vocab_size'] == 8
-        assert result['train_tokens'] + result['val_tokens'] == len(text)
-        assert (out_dir / 'train.bin').exists()
-        assert (out_dir / 'val.bin').exists()
-        assert (out_dir / 'meta.pkl').exists()
+        assert result["vocab_size"] == 8
+        assert result["train_tokens"] + result["val_tokens"] == len(text)
+        assert (out_dir / "train.bin").exists()
+        assert (out_dir / "val.bin").exists()
+        assert (out_dir / "meta.pkl").exists()

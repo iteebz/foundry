@@ -2,8 +2,9 @@
 
 import sys
 import tempfile
-import yaml
 from pathlib import Path
+
+import yaml
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -33,12 +34,12 @@ def test_save_moe_mutation():
     with tempfile.TemporaryDirectory() as tmpdir:
         config = mutate_moe(4, 2)
         path = save_mutation(config, tmpdir)
-        
+
         assert path.exists()
-        
+
         with open(path) as f:
             loaded = yaml.safe_load(f)
-        
+
         assert loaded["name"] == config["name"]
         assert loaded["model_args"]["mlp_type"] == "moe"
         assert loaded["model_args"]["moe_n_experts"] == 4

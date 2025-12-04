@@ -2,12 +2,13 @@
 
 import sys
 import tempfile
-import yaml
 from pathlib import Path
+
+import yaml
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from mutate import mutate_weight_decay, mutate_adam_betas, save_mutation
+from mutate import mutate_adam_betas, mutate_weight_decay, save_mutation
 
 
 def test_mutate_weight_decay():
@@ -30,12 +31,12 @@ def test_save_weight_decay_mutation():
     with tempfile.TemporaryDirectory() as tmpdir:
         config = mutate_weight_decay(1e-2)
         path = save_mutation(config, tmpdir)
-        
+
         assert path.exists()
-        
+
         with open(path) as f:
             loaded = yaml.safe_load(f)
-        
+
         assert loaded["name"] == config["name"]
         assert loaded["training"]["weight_decay"] == config["training"]["weight_decay"]
 
@@ -45,12 +46,12 @@ def test_save_adam_betas_mutation():
     with tempfile.TemporaryDirectory() as tmpdir:
         config = mutate_adam_betas(0.9, 0.999)
         path = save_mutation(config, tmpdir)
-        
+
         assert path.exists()
-        
+
         with open(path) as f:
             loaded = yaml.safe_load(f)
-        
+
         assert loaded["name"] == config["name"]
         assert loaded["training"]["beta1"] == config["training"]["beta1"]
         assert loaded["training"]["beta2"] == config["training"]["beta2"]

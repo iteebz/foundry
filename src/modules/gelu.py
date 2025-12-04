@@ -1,6 +1,5 @@
 """GELU activation variants."""
 
-import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
@@ -16,5 +15,4 @@ class GELU(nn.Module):
     def forward(self, x):
         x = self.fc(x)
         x = F.gelu(x)
-        x = self.proj(x)
-        return x
+        return self.proj(x)

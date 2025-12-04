@@ -2,18 +2,19 @@
 
 import sys
 import tempfile
-import yaml
 from pathlib import Path
+
+import yaml
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from mutate import (
+    load_baseline,
     mutate_attention,
     mutate_depth,
-    mutate_width,
     mutate_lr,
+    mutate_width,
     save_mutation,
-    load_baseline,
 )
 
 
@@ -61,12 +62,12 @@ def test_save_mutation():
     with tempfile.TemporaryDirectory() as tmpdir:
         config = mutate_attention("gqa_2kv")
         path = save_mutation(config, tmpdir)
-        
+
         assert path.exists()
-        
+
         with open(path) as f:
             loaded = yaml.safe_load(f)
-        
+
         assert loaded["name"] == config["name"]
         assert loaded["model_args"]["n_kv_head"] == config["model_args"]["n_kv_head"]
 
@@ -75,7 +76,7 @@ def test_attention_variant_validation():
     """Invalid attention variants raise errors."""
     try:
         mutate_attention("invalid_variant")
-        assert False, "Should have raised ValueError"
+        raise AssertionError("Should have raised ValueError")
     except ValueError as e:
         assert "Unknown attention variant" in str(e)
 

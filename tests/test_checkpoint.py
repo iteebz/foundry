@@ -1,11 +1,13 @@
 import sys
-import torch
 import tempfile
 from pathlib import Path
+
+import torch
+
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+from checkpoint import load_checkpoint, save_checkpoint
 from model import GPT, GPTConfig
-from checkpoint import save_checkpoint, load_checkpoint
 
 
 def test_save_load_checkpoint():
@@ -18,27 +20,27 @@ def test_save_load_checkpoint():
         n_kv_head=2,
         n_embd=64,
         dropout=0.0,
-        bias=False
+        bias=False,
     )
-    
+
     model = GPT(config)
-    optimizer = model.configure_optimizers(0.01, 1e-4, (0.9, 0.95), 'cpu')
-    
+    optimizer = model.configure_optimizers(0.01, 1e-4, (0.9, 0.95), "cpu")
+
     original_weight = model.transformer.wte.weight.clone()
-    
-    with tempfile.NamedTemporaryFile(suffix='.pt', delete=False) as f:
+
+    with tempfile.NamedTemporaryFile(suffix=".pt", delete=False) as f:
         temp_path = f.name
-    
+
     try:
-        save_checkpoint(model, optimizer, {'test': 'config'}, temp_path)
-        
+        save_checkpoint(model, optimizer, {"test": "config"}, temp_path)
+
         model.transformer.wte.weight.data.zero_()
         assert not torch.allclose(model.transformer.wte.weight, original_weight)
-        
+
         loaded_config = load_checkpoint(model, optimizer, temp_path)
-        
+
         assert torch.allclose(model.transformer.wte.weight, original_weight)
-        assert loaded_config['test'] == 'config'
+        assert loaded_config["test"] == "config"
         print("✓ Checkpoint save/load")
     finally:
         Path(temp_path).unlink()
@@ -54,15 +56,15 @@ def test_load_checkpoint_no_optimizer():
         n_kv_head=2,
         n_embd=64,
         dropout=0.0,
-        bias=False
+        bias=False,
     )
-    
+
     model = GPT(config)
-    optimizer = model.configure_optimizers(0.01, 1e-4, (0.9, 0.95), 'cpu')
-    
-    with tempfile.NamedTemporaryFile(suffix='.pt', delete=False) as f:
+    optimizer = model.configure_optimizers(0.01, 1e-4, (0.9, 0.95), "cpu")
+
+    with tempfile.NamedTemporaryFile(suffix=".pt", delete=False) as f:
         temp_path = f.name
-    
+
     try:
         save_checkpoint(model, optimizer, {}, temp_path)
         load_checkpoint(model, None, temp_path)
@@ -71,7 +73,7 @@ def test_load_checkpoint_no_optimizer():
         Path(temp_path).unlink()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     test_save_load_checkpoint()
     test_load_checkpoint_no_optimizer()
     print("\nAll checkpoint tests passed")

@@ -1,6 +1,9 @@
 """Model factory for loading models from experiment YAML configs."""
-import yaml
+
+import contextlib
 from pathlib import Path
+
+import yaml
 
 
 def load_experiment_config(experiment_file: str) -> dict:
@@ -8,11 +11,10 @@ def load_experiment_config(experiment_file: str) -> dict:
     config_path = Path(experiment_file)
     if not config_path.exists():
         raise FileNotFoundError(f"Experiment config not found: {experiment_file}")
-    
+
     with open(config_path) as f:
-        config = yaml.safe_load(f)
-    
-    return config
+        return yaml.safe_load(f)
+
 
 
 def get_model_from_experiment(experiment_file: str) -> dict:
@@ -26,16 +28,14 @@ def get_training_overrides(experiment_file: str) -> dict:
     config = load_experiment_config(experiment_file)
     training_config = config.get("training", {})
     model_args = config.get("model_args", {})
-    
+
     overrides = {}
     overrides.update(training_config)
     overrides.update(model_args)
-    
+
     for key, val in overrides.items():
         if isinstance(val, str):
-            try:
+            with contextlib.suppress(ValueError):
                 overrides[key] = float(val)
-            except ValueError:
-                pass
-    
+
     return overrides

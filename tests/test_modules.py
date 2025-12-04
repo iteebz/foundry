@@ -1,12 +1,15 @@
 import sys
-import torch
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
+import torch
+
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+from modules.gqa import GroupedQueryAttention
 from modules.rmsnorm import RMSNorm
 from modules.rope import RotaryEmbedding, apply_rotary_emb
 from modules.swiglu import SwiGLU
-from modules.gqa import GroupedQueryAttention
+
 
 def test_rmsnorm():
     batch, seq, dim = 2, 10, 64
@@ -16,6 +19,7 @@ def test_rmsnorm():
     assert out.shape == x.shape
     assert not torch.isnan(out).any()
     print("✓ RMSNorm")
+
 
 def test_rope():
     batch, seq, n_head, head_dim = 2, 10, 8, 64
@@ -33,6 +37,7 @@ def test_rope():
     assert k_rot.shape == k.shape
     print("✓ RoPE")
 
+
 def test_swiglu():
     batch, seq, dim = 2, 10, 64
     x = torch.randn(batch, seq, dim)
@@ -41,6 +46,7 @@ def test_swiglu():
     assert out.shape == x.shape
     assert not torch.isnan(out).any()
     print("✓ SwiGLU")
+
 
 def test_gqa():
     batch, seq, n_embd = 2, 10, 64
@@ -52,7 +58,8 @@ def test_gqa():
     assert not torch.isnan(out).any()
     print("✓ GQA")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     test_rmsnorm()
     test_rope()
     test_swiglu()

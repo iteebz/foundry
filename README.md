@@ -161,7 +161,7 @@ Supports ShareGPT and OpenAI message formats. See `src/data/conversation.py`.
 ### Mutation Surfaces
 
 **Implemented:**
-1. **Attention** - GQA (2kv, 1kv), MHA
+1. **Attention** - GQA (2kv, 1kv), MHA, MLA (DeepSeek), MoE, Sliding Window, Sparse
 2. **Architecture** - Depth/width scaling
 3. **Normalization** - RMSNorm, LayerNorm, QKNorm
 4. **Activation** - SwiGLU, GELU, GLU
@@ -173,7 +173,8 @@ Supports ShareGPT and OpenAI message formats. See `src/data/conversation.py`.
 10. **LoRA** - Rank, alpha, dropout (finetuning)
 11. **Model Zoo** - Load pretrained (llama3, mistral, qwen2)
 
-**Future:**
-- Advanced attention (MLA, sliding window, sparse)
-- Curriculum learning
-- Multi-GPU DDP validation
+**Advanced Attention:**
+- MLA: Multi-latent compression (DeepSeek)
+- MoE: Mixture of experts routing
+- Sliding Window: Local attention window
+- Sparse: Strided local + global patterns

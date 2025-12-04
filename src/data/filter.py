@@ -1,5 +1,5 @@
-from typing import Iterator
 import hashlib
+from collections.abc import Iterator
 
 
 def dedupe(texts: Iterator[str]) -> Iterator[str]:
@@ -11,7 +11,9 @@ def dedupe(texts: Iterator[str]) -> Iterator[str]:
             yield text
 
 
-def length_filter(texts: Iterator[str], min_len: int = 1, max_len: int | None = None) -> Iterator[str]:
+def length_filter(
+    texts: Iterator[str], min_len: int = 1, max_len: int | None = None
+) -> Iterator[str]:
     for text in texts:
         if len(text) >= min_len and (max_len is None or len(text) <= max_len):
             yield text

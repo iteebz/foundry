@@ -8,7 +8,12 @@ import torch.nn as nn
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from lora import LoRALinear, apply_lora_to_model, mark_only_lora_as_trainable, get_lora_params
+from lora import (
+    LoRALinear,
+    apply_lora_to_model,
+    get_lora_params,
+    mark_only_lora_as_trainable,
+)
 
 
 def test_lora_linear_forward():
@@ -44,36 +49,38 @@ def test_lora_zero_rank():
 
 def test_apply_lora_to_model():
     """LoRA can be applied to a simple model."""
+
     class SimpleModel(nn.Module):
         def __init__(self):
             super().__init__()
             self.fc1 = nn.Linear(64, 128)
             self.fc2 = nn.Linear(128, 64)
-        
+
         def forward(self, x):
             return self.fc2(self.fc1(x))
-    
+
     model = SimpleModel()
     model = apply_lora_to_model(model, r=8, lora_alpha=16)
-    
+
     assert isinstance(model.fc1, LoRALinear)
     assert isinstance(model.fc2, LoRALinear)
 
 
 def test_mark_only_lora_trainable():
     """Only LoRA parameters are trainable after marking."""
+
     class ModelWithLoRA(nn.Module):
         def __init__(self):
             super().__init__()
             self.lora_layer = LoRALinear(64, 128, r=8)
             self.normal_layer = nn.Linear(128, 64)
-    
+
     model = ModelWithLoRA()
     mark_only_lora_as_trainable(model)
-    
-    lora_params = [p for n, p in model.named_parameters() if 'lora_' in n]
-    other_params = [p for n, p in model.named_parameters() if 'lora_' not in n]
-    
+
+    lora_params = [p for n, p in model.named_parameters() if "lora_" in n]
+    other_params = [p for n, p in model.named_parameters() if "lora_" not in n]
+
     assert all(p.requires_grad for p in lora_params)
     assert all(not p.requires_grad for p in other_params)
 
@@ -82,23 +89,23 @@ def test_get_lora_params():
     """LoRA param stats are computed correctly."""
     layer = LoRALinear(64, 128, r=8)
     stats = get_lora_params(layer)
-    
-    assert stats['total_params'] > 0
-    assert stats['trainable_params'] > 0
-    assert 0 < stats['trainable_pct'] < 100
+
+    assert stats["total_params"] > 0
+    assert stats["trainable_params"] > 0
+    assert 0 < stats["trainable_pct"] < 100
 
 
 def test_lora_merge_unmerge():
     """LoRA weights can be merged and unmerged."""
     layer = LoRALinear(64, 128, r=8)
-    
+
     layer.lora_B.data.normal_(0, 0.01)
-    
+
     original_weight = layer.linear.weight.data.clone()
-    
+
     layer.merge()
     assert not torch.allclose(layer.linear.weight.data, original_weight)
-    
+
     layer.unmerge()
     assert torch.allclose(layer.linear.weight.data, original_weight)
 

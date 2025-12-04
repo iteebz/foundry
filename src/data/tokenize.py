@@ -1,4 +1,3 @@
-from typing import Callable
 import pickle
 from pathlib import Path
 
@@ -10,10 +9,10 @@ class CharTokenizer:
         if text:
             self.fit(text)
 
-    def fit(self, text: str) -> 'CharTokenizer':
+    def fit(self, text: str) -> "CharTokenizer":
         chars = sorted(set(text))
         self.stoi = {ch: i for i, ch in enumerate(chars)}
-        self.itos = {i: ch for i, ch in enumerate(chars)}
+        self.itos = dict(enumerate(chars))
         return self
 
     @property
@@ -24,20 +23,20 @@ class CharTokenizer:
         return [self.stoi[c] for c in text if c in self.stoi]
 
     def decode(self, ids: list[int]) -> str:
-        return ''.join(self.itos.get(i, '') for i in ids)
+        return "".join(self.itos.get(i, "") for i in ids)
 
     def save(self, path: Path):
-        meta = {'vocab_size': self.vocab_size, 'stoi': self.stoi, 'itos': self.itos}
-        with open(path, 'wb') as f:
+        meta = {"vocab_size": self.vocab_size, "stoi": self.stoi, "itos": self.itos}
+        with open(path, "wb") as f:
             pickle.dump(meta, f)
 
     @classmethod
-    def load(cls, path: Path) -> 'CharTokenizer':
-        with open(path, 'rb') as f:
+    def load(cls, path: Path) -> "CharTokenizer":
+        with open(path, "rb") as f:
             meta = pickle.load(f)
         tok = cls()
-        tok.stoi = meta['stoi']
-        tok.itos = meta['itos']
+        tok.stoi = meta["stoi"]
+        tok.itos = meta["itos"]
         return tok
 
 

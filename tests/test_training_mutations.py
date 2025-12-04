@@ -2,12 +2,13 @@
 
 import sys
 import tempfile
-import yaml
 from pathlib import Path
+
+import yaml
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from mutate import mutate_batch_size, mutate_warmup, mutate_grad_clip, save_mutation
+from mutate import mutate_batch_size, mutate_grad_clip, mutate_warmup, save_mutation
 
 
 def test_mutate_batch_size():
@@ -36,12 +37,12 @@ def test_save_batch_size_mutation():
     with tempfile.TemporaryDirectory() as tmpdir:
         config = mutate_batch_size(128)
         path = save_mutation(config, tmpdir)
-        
+
         assert path.exists()
-        
+
         with open(path) as f:
             loaded = yaml.safe_load(f)
-        
+
         assert loaded["name"] == config["name"]
         assert loaded["training"]["batch_size"] == config["training"]["batch_size"]
 
@@ -51,12 +52,12 @@ def test_save_warmup_mutation():
     with tempfile.TemporaryDirectory() as tmpdir:
         config = mutate_warmup(500)
         path = save_mutation(config, tmpdir)
-        
+
         assert path.exists()
-        
+
         with open(path) as f:
             loaded = yaml.safe_load(f)
-        
+
         assert loaded["name"] == config["name"]
         assert loaded["training"]["warmup_iters"] == config["training"]["warmup_iters"]
 
@@ -66,12 +67,12 @@ def test_save_grad_clip_mutation():
     with tempfile.TemporaryDirectory() as tmpdir:
         config = mutate_grad_clip(0.5)
         path = save_mutation(config, tmpdir)
-        
+
         assert path.exists()
-        
+
         with open(path) as f:
             loaded = yaml.safe_load(f)
-        
+
         assert loaded["name"] == config["name"]
         assert loaded["training"]["grad_clip"] == config["training"]["grad_clip"]
 

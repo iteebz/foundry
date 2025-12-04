@@ -8,7 +8,14 @@ from torch.nn import functional as F
 class GroupedQueryAttention(nn.Module):
     """GQA: num_kv_heads < num_heads, with kv shared across groups."""
 
-    def __init__(self, n_embd: int, n_head: int, n_kv_head: int = None, bias: bool = True, dropout: float = 0.0):
+    def __init__(
+        self,
+        n_embd: int,
+        n_head: int,
+        n_kv_head: int = None,
+        bias: bool = True,
+        dropout: float = 0.0,
+    ):
         super().__init__()
         assert n_embd % n_head == 0
         if n_kv_head is None:
@@ -39,6 +46,12 @@ class GroupedQueryAttention(nn.Module):
         k = k.repeat_interleave(self.n_rep, dim=1)
         v = v.repeat_interleave(self.n_rep, dim=1)
 
-        y = F.scaled_dot_product_attention(q, k, v, is_causal=True, dropout_p=self.attn_dropout.p if self.training else 0.0)
+        y = F.scaled_dot_product_attention(
+            q,
+            k,
+            v,
+            is_causal=True,
+            dropout_p=self.attn_dropout.p if self.training else 0.0,
+        )
         y = y.transpose(1, 2).contiguous().view(B, T, C)
         return self.resid_dropout(self.o_proj(y))

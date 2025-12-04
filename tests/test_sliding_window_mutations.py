@@ -2,8 +2,9 @@
 
 import sys
 import tempfile
-import yaml
 from pathlib import Path
+
+import yaml
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -29,12 +30,12 @@ def test_save_sliding_window_mutation():
     with tempfile.TemporaryDirectory() as tmpdir:
         config = mutate_sliding_window(1024)
         path = save_mutation(config, tmpdir)
-        
+
         assert path.exists()
-        
+
         with open(path) as f:
             loaded = yaml.safe_load(f)
-        
+
         assert loaded["name"] == config["name"]
         assert loaded["model_args"]["sliding_window_size"] == 1024
 

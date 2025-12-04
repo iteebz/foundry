@@ -1,8 +1,9 @@
 """Tests for Multi-Latent Attention."""
 
 import sys
-import torch
 from pathlib import Path
+
+import torch
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -23,7 +24,7 @@ def test_mla_forward():
     mla = MultiLatentAttention(n_embd=384, n_head=6, latent_dim=192)
     x = torch.randn(2, 16, 384)
     y = mla(x)
-    
+
     assert y.shape == (2, 16, 384)
 
 
@@ -38,18 +39,18 @@ def test_mla_output_deterministic():
     torch.manual_seed(42)
     mla = MultiLatentAttention(n_embd=128, n_head=4, dropout=0.0)
     mla.eval()
-    
+
     x = torch.randn(1, 8, 128)
     y1 = mla(x)
     y2 = mla(x)
-    
+
     assert torch.allclose(y1, y2)
 
 
 def test_mla_compression():
     """MLA compresses KV to smaller dimension."""
     mla = MultiLatentAttention(n_embd=384, n_head=6, latent_dim=192)
-    
+
     assert mla.c_down.out_features == 192
     assert mla.kv_up.out_features == 2 * 64
 

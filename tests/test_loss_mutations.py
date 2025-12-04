@@ -2,8 +2,9 @@
 
 import sys
 import tempfile
-import yaml
 from pathlib import Path
+
+import yaml
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -35,7 +36,7 @@ def test_mutate_loss_invalid():
     """Invalid loss types raise errors."""
     try:
         mutate_loss("invalid_loss")
-        assert False, "Should have raised ValueError"
+        raise AssertionError("Should have raised ValueError")
     except ValueError as e:
         assert "Unknown loss type" in str(e)
 
@@ -45,12 +46,12 @@ def test_save_loss_mutation():
     with tempfile.TemporaryDirectory() as tmpdir:
         config = mutate_loss("focal")
         path = save_mutation(config, tmpdir)
-        
+
         assert path.exists()
-        
+
         with open(path) as f:
             loaded = yaml.safe_load(f)
-        
+
         assert loaded["name"] == config["name"]
         assert loaded["model_args"]["loss_type"] == config["model_args"]["loss_type"]
 

@@ -1,8 +1,9 @@
 """Tests for Mixture of Experts."""
 
 import sys
-import torch
 from pathlib import Path
+
+import torch
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -23,7 +24,7 @@ def test_moe_forward():
     moe = MoELayer(n_embd=384, n_experts=4, top_k=2)
     x = torch.randn(2, 16, 384)
     y = moe(x)
-    
+
     assert y.shape == (2, 16, 384)
 
 
@@ -32,10 +33,10 @@ def test_moe_routing():
     torch.manual_seed(42)
     moe = MoELayer(n_embd=128, n_experts=4, top_k=2, dropout=0.0)
     moe.eval()
-    
+
     x = torch.randn(1, 8, 128)
     y = moe(x)
-    
+
     assert y.shape == x.shape
     assert not torch.isnan(y).any()
 
@@ -44,10 +45,10 @@ def test_moe_single_expert():
     """MoE with 1 expert and top_k=1 behaves like MLP."""
     moe = MoELayer(n_embd=128, n_experts=1, top_k=1, dropout=0.0)
     moe.eval()
-    
+
     x = torch.randn(1, 4, 128)
     y = moe(x)
-    
+
     assert y.shape == x.shape
 
 

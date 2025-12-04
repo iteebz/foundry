@@ -2,8 +2,9 @@
 
 import sys
 import tempfile
-import yaml
 from pathlib import Path
+
+import yaml
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -38,12 +39,12 @@ def test_save_data_filter_mutation():
     with tempfile.TemporaryDirectory() as tmpdir:
         config = mutate_data_filter(min_len=10, max_len=1000)
         path = save_mutation(config, tmpdir)
-        
+
         assert path.exists()
-        
+
         with open(path) as f:
             loaded = yaml.safe_load(f)
-        
+
         assert loaded["name"] == config["name"]
         assert loaded["data"]["min_len"] == config["data"]["min_len"]
         assert loaded["data"]["max_len"] == config["data"]["max_len"]

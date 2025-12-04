@@ -2,12 +2,18 @@
 
 import sys
 import tempfile
-import yaml
 from pathlib import Path
+
+import yaml
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from mutate import mutate_lora_rank, mutate_lora_alpha, mutate_lora_dropout, save_mutation
+from mutate import (
+    mutate_lora_alpha,
+    mutate_lora_dropout,
+    mutate_lora_rank,
+    save_mutation,
+)
 
 
 def test_mutate_lora_rank():
@@ -39,12 +45,12 @@ def test_save_lora_mutation():
     with tempfile.TemporaryDirectory() as tmpdir:
         config = mutate_lora_rank(16)
         path = save_mutation(config, tmpdir)
-        
+
         assert path.exists()
-        
+
         with open(path) as f:
             loaded = yaml.safe_load(f)
-        
+
         assert loaded["name"] == config["name"]
         assert loaded["lora"]["r"] == config["lora"]["r"]
 

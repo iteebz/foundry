@@ -1,6 +1,5 @@
 """QK Normalization for attention stability."""
 
-import torch
 import torch.nn as nn
 
 

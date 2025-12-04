@@ -2,8 +2,9 @@
 
 import sys
 import tempfile
-import yaml
 from pathlib import Path
+
+import yaml
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -28,7 +29,7 @@ def test_mutate_position_invalid():
     """Invalid position encodings raise errors."""
     try:
         mutate_position_encoding("invalid_pos")
-        assert False, "Should have raised ValueError"
+        raise AssertionError("Should have raised ValueError")
     except ValueError as e:
         assert "Unknown position encoding" in str(e)
 
@@ -38,14 +39,16 @@ def test_save_position_mutation():
     with tempfile.TemporaryDirectory() as tmpdir:
         config = mutate_position_encoding("alibi")
         path = save_mutation(config, tmpdir)
-        
+
         assert path.exists()
-        
+
         with open(path) as f:
             loaded = yaml.safe_load(f)
-        
+
         assert loaded["name"] == config["name"]
-        assert loaded["model_args"]["position_encoding"] == config["model_args"]["position_encoding"]
+        assert (
+            loaded["model_args"]["position_encoding"] == config["model_args"]["position_encoding"]
+        )
 
 
 if __name__ == "__main__":

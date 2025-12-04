@@ -6,14 +6,16 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from data.pack import prepare_dataset
-from data.filter import dedupe, length_filter
 
 data_dir = Path(__file__).parent
-input_path = data_dir / 'input.txt'
+input_path = data_dir / "input.txt"
 
 if not input_path.exists():
     import requests
-    url = 'https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt'
+
+    url = (
+        "https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt"
+    )
     input_path.write_text(requests.get(url).text)
 
 text = input_path.read_text()
