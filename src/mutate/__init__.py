@@ -20,6 +20,7 @@ from .core import (
     save_mutation,
 )
 from .data import (
+    mutate_constitution,
     mutate_conversation_format,
     mutate_curriculum,
     mutate_data_filter,
@@ -64,4 +65,5 @@ __all__ = [
     "mutate_data_filter",
     "mutate_conversation_format",
     "mutate_curriculum",
+    "mutate_constitution",
 ]

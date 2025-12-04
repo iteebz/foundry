@@ -1,5 +1,6 @@
 """Data pipeline mutation functions."""
 
+from pathlib import Path
 from typing import Any
 
 from .core import load_baseline
@@ -84,6 +85,27 @@ def mutate_curriculum(
         "strategy": strategy,
         "schedule": schedule,
         "num_stages": num_stages,
+    }
+
+    return config
+
+
+def mutate_constitution(
+    constitution_path: str, base_config: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Generate constitution injection mutation.
+    
+    Args:
+        constitution_path: Path to constitution dataset (JSONL with preference pairs)
+    """
+    config = base_config or load_baseline()
+
+    config["name"] = f"constitution_{Path(constitution_path).stem}"
+    if "data" not in config:
+        config["data"] = {}
+    config["data"]["constitution"] = {
+        "enabled": True,
+        "path": constitution_path,
     }
 
     return config
