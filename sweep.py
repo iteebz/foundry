@@ -65,7 +65,7 @@ def train_mutation(experiment_path: Path) -> dict:
     }
 
 
-def sweep(mutation_type: str, variants: list[str], baseline_path: str, jobs: int = 4) -> None:
+def sweep(mutation_type: str, variants: list[str], baseline_path: str, jobs: int = 4, promote: bool = False) -> None:
     """Run parallel sweep of mutations."""
     print(f"Generating {len(variants)} {mutation_type} mutations...")
     
@@ -132,6 +132,17 @@ def sweep(mutation_type: str, variants: list[str], baseline_path: str, jobs: int
     report_path.parent.mkdir(exist_ok=True)
     report_path.write_text(json.dumps(report, indent=2))
     print(f"Report: {report_path}")
+    
+    if promote:
+        import shutil
+        winner_path = Path(winner["config_path"])
+        baseline_backup = Path(baseline_path).with_suffix(".yaml.backup")
+        
+        shutil.copy(baseline_path, baseline_backup)
+        shutil.copy(winner_path, baseline_path)
+        
+        print(f"\n🚀 PROMOTED: {winner['experiment']} → {baseline_path}")
+        print(f"   Backup: {baseline_backup}")
 
 
 def main():
@@ -140,9 +151,10 @@ def main():
     parser.add_argument("variants", nargs="+", help="Variants to test")
     parser.add_argument("--baseline", default="experiments/baseline.yaml", help="Baseline config")
     parser.add_argument("--jobs", type=int, default=4, help="Parallel jobs")
+    parser.add_argument("--promote", action="store_true", help="Auto-promote winner to baseline")
     
     args = parser.parse_args()
-    sweep(args.mutation_type, args.variants, args.baseline, args.jobs)
+    sweep(args.mutation_type, args.variants, args.baseline, args.jobs, args.promote)
 
 
 if __name__ == "__main__":

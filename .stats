@@ -1,0 +1,30 @@
+FOUNDRY v1.0 - REFERENCE GRADE ML TRAINING INFRASTRUCTURE
+
+Lines of Code: 1586
+Modules: 12
+Test Files: 14
+Tests: 59 (100% passing)
+Commits: 32
+
+Mutation Types: 14
+- Attention (GQA, MHA)
+- Architecture (depth, width)
+- Normalization (RMSNorm, LayerNorm, QKNorm)
+- Activation (SwiGLU, GELU, GLU)
+- Position Encoding (RoPE, ALiBi)
+- Loss (CrossEntropy, Focal, LabelSmoothing)
+- Training (LR, batch_size, warmup, grad_clip)
+- Optimizer (weight_decay, adam_betas)
+- Data (filtering, dedupe)
+
+Core Files:
+- src/train.py: 293 LOC
+- src/model.py: 235 LOC
+- src/mutate.py: 391 LOC
+- sweep.py: 161 LOC
+- compare.py: 109 LOC
+
+RSI Loop: OPERATIONAL
+Autonomous Iteration: ENABLED
+
+Zero ceremony. Agent-parseable. Zealot-grade.

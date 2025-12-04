@@ -11,14 +11,14 @@ poetry install
 # Train baseline
 python src/train.py experiments/baseline.yaml
 
-# Generate mutations
+# Generate single mutation
 python -m src.mutate attention gqa_2kv
-python -m src.mutate norm layernorm
-python -m src.mutate activation gelu
-python -m src.mutate position alibi
 
 # Compare baseline vs mutation
 python compare.py experiments/baseline.yaml experiments/attn_gqa_2kv.yaml
+
+# Run parallel sweep (autonomous iteration)
+python sweep.py attention gqa_2kv gqa_1kv mha --promote
 ```
 
 ## Mutation Framework
@@ -93,6 +93,24 @@ python -m src.mutate lr 3e-4
 ```
 
 Mutations saved to `experiments/*.yaml`, ready for training.
+
+## Autonomous Iteration
+
+The sweep runner enables fully autonomous architecture search:
+
+```bash
+# Generate + train + rank mutations in parallel
+python sweep.py norm rmsnorm layernorm --jobs 8 --promote
+
+# Auto-promotes winner to baseline.yaml
+# Next sweep builds on the winner automatically
+python sweep.py activation swiglu gelu glu --promote
+
+# Iterate indefinitely
+python sweep.py lr 3e-4 6e-4 1e-3 --promote
+```
+
+Each `--promote` replaces baseline with the winning mutation. The loop self-improves without human intervention.
 
 ### Mutation Surfaces
 
