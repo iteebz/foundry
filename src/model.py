@@ -17,6 +17,7 @@ from modules.gqa import GroupedQueryAttention
 from modules.mla import MultiLatentAttention
 from modules.moe import MoELayer
 from modules.sliding_window import SlidingWindowMask
+from modules.sparse_attention import SparseAttentionMask
 from modules.focal_loss import FocalLoss
 from modules.label_smoothing import LabelSmoothingCrossEntropy
 
@@ -32,6 +33,7 @@ class CausalSelfAttention(nn.Module):
         self.use_alibi = config.position_encoding == 'alibi'
         self.use_mla = config.attention_type == 'mla'
         self.use_sliding_window = getattr(config, 'sliding_window_size', None) is not None
+        self.use_sparse = getattr(config, 'sparse_block_size', None) is not None
         
         if self.use_mla:
             self.mla = MultiLatentAttention(
@@ -59,6 +61,13 @@ class CausalSelfAttention(nn.Module):
             if self.use_sliding_window:
                 self.sliding_window = SlidingWindowMask(
                     config.sliding_window_size,
+                    max_seq_len=config.block_size
+                )
+            
+            if self.use_sparse:
+                self.sparse = SparseAttentionMask(
+                    block_size=config.sparse_block_size,
+                    stride=getattr(config, 'sparse_stride', config.sparse_block_size),
                     max_seq_len=config.block_size
                 )
 
@@ -90,6 +99,13 @@ class CausalSelfAttention(nn.Module):
                 attn_bias = attn_bias * sw_mask
             else:
                 attn_bias = sw_mask
+            is_causal = False
+        elif self.use_sparse:
+            sparse_mask = self.sparse(T)
+            if attn_bias is not None:
+                attn_bias = attn_bias * sparse_mask
+            else:
+                attn_bias = sparse_mask
             is_causal = False
         else:
             is_causal = True
@@ -155,6 +171,8 @@ class GPTConfig:
     moe_n_experts: int = 8
     moe_top_k: int = 2
     sliding_window_size: int = None
+    sparse_block_size: int = None
+    sparse_stride: int = None
 
 class GPT(nn.Module):
     def __init__(self, config):

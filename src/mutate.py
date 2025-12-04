@@ -411,6 +411,31 @@ def mutate_sliding_window(
     return config
 
 
+def mutate_sparse_attention(
+    block_size: int = 64,
+    stride: Optional[int] = None,
+    base_config: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Generate sparse attention mutation.
+    
+    Args:
+        block_size: Local attention block size
+        stride: Stride for global attention (default: same as block_size)
+    """
+    config = base_config or load_baseline()
+    
+    if stride is None:
+        stride = block_size
+    
+    config["name"] = f"sparse_b{block_size}_s{stride}"
+    if "model_args" not in config:
+        config["model_args"] = {}
+    config["model_args"]["sparse_block_size"] = block_size
+    config["model_args"]["sparse_stride"] = stride
+    
+    return config
+
+
 def save_mutation(config: Dict[str, Any], output_dir: str = "experiments") -> Path:
     """Save mutation config to YAML."""
     output_path = Path(output_dir) / f"{config['name']}.yaml"
@@ -459,6 +484,7 @@ def generate_sweep(
         "mla": mutate_mla,
         "moe": mutate_moe,
         "sliding_window": mutate_sliding_window,
+        "sparse_attention": mutate_sparse_attention,
     }
     
     if mutation_type not in mutation_funcs:
@@ -484,12 +510,13 @@ if __name__ == "__main__":
         print("Types: attention, depth, width, lr, norm, activation, position, loss,")
         print("       batch_size, warmup, grad_clip, weight_decay, adam_betas,")
         print("       lora_rank, lora_alpha, lora_dropout, conversation_format,")
-        print("       mla, moe, sliding_window")
+        print("       mla, moe, sliding_window, sparse_attention")
         print("\nExamples:")
         print("  python -m src.mutate attention gqa_2kv")
         print("  python -m src.mutate mla 192")
         print("  python -m src.mutate moe 8 2")
         print("  python -m src.mutate sliding_window 512")
+        print("  python -m src.mutate sparse_attention 64 128")
         sys.exit(1)
     
     mutation_type = sys.argv[1]
@@ -541,6 +568,10 @@ if __name__ == "__main__":
     elif mutation_type == "sliding_window":
         window_size = int(sys.argv[2]) if len(sys.argv) > 2 else 256
         config = mutate_sliding_window(window_size)
+    elif mutation_type == "sparse_attention":
+        block_size = int(sys.argv[2]) if len(sys.argv) > 2 else 64
+        stride = int(sys.argv[3]) if len(sys.argv) > 3 else None
+        config = mutate_sparse_attention(block_size, stride)
     else:
         print(f"Unknown mutation type: {mutation_type}")
         sys.exit(1)
