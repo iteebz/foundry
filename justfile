@@ -1,18 +1,42 @@
-# Foundry automation
+default:
+    @just --list
 
-# Run all tests
+clean:
+    @echo "Cleaning foundry..."
+    @rm -rf .pytest_cache .ruff_cache __pycache__ .venv out/smoke_* out/*.pt
+    @find . -type d -name "__pycache__" -exec rm -rf {} +
+    @find . -type d -name ".pytest_cache" -exec rm -rf {} +
+
+install:
+    @poetry lock
+    @poetry install
+
+ci:
+    @poetry run ruff format .
+    @poetry run ruff check . --fix --unsafe-fixes
+    @poetry run pytest tests/ -q
+
 test:
-    pytest tests/
+    @poetry run pytest tests/
 
-# Quick validation run - requires CUDA
+cov:
+    @poetry run pytest --cov=src tests/
+
+format:
+    @poetry run ruff format .
+
+lint:
+    @poetry run ruff check .
+
+fix:
+    @poetry run ruff check . --fix --unsafe-fixes
+
 train-smoke:
     @echo "==> Smoke test: baseline"
-    python src/train.py experiments/baseline.yaml
+    poetry run python src/train.py experiments/baseline.yaml
 
-# Baseline vs modern full comparison run - requires CUDA
 compare:
-    python compare.py experiments/baseline.yaml experiments/modern.yaml
+    poetry run python compare.py experiments/baseline.yaml experiments/modern.yaml
 
-# CI: test only (train-smoke requires GPU)
-ci: test
-    @echo "✅ CI passed (tests only - training requires GPU)"
+commits:
+    @git --no-pager log --pretty=format:"%h | %ar | %s"
