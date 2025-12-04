@@ -187,6 +187,45 @@ def mutate_loss(
     return config
 
 
+def mutate_batch_size(
+    batch_size: int,
+    base_config: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Generate batch size mutations."""
+    config = base_config or load_baseline()
+    config["name"] = f"batch_{batch_size}"
+    if "training" not in config:
+        config["training"] = {}
+    config["training"]["batch_size"] = batch_size
+    return config
+
+
+def mutate_warmup(
+    warmup_iters: int,
+    base_config: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Generate warmup schedule mutations."""
+    config = base_config or load_baseline()
+    config["name"] = f"warmup_{warmup_iters}"
+    if "training" not in config:
+        config["training"] = {}
+    config["training"]["warmup_iters"] = warmup_iters
+    return config
+
+
+def mutate_grad_clip(
+    grad_clip: float,
+    base_config: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Generate gradient clipping mutations."""
+    config = base_config or load_baseline()
+    config["name"] = f"gradclip_{grad_clip}"
+    if "training" not in config:
+        config["training"] = {}
+    config["training"]["grad_clip"] = grad_clip
+    return config
+
+
 def save_mutation(config: Dict[str, Any], output_dir: str = "experiments") -> Path:
     """Save mutation config to YAML."""
     output_path = Path(output_dir) / f"{config['name']}.yaml"
@@ -222,6 +261,9 @@ def generate_sweep(
         "activation": mutate_activation,
         "position": mutate_position_encoding,
         "loss": mutate_loss,
+        "batch_size": mutate_batch_size,
+        "warmup": mutate_warmup,
+        "grad_clip": mutate_grad_clip,
     }
     
     if mutation_type not in mutation_funcs:
@@ -244,7 +286,7 @@ if __name__ == "__main__":
     
     if len(sys.argv) < 3:
         print("Usage: python -m src.mutate <type> <variant>")
-        print("Types: attention, depth, width, lr, norm, activation, position, loss")
+        print("Types: attention, depth, width, lr, norm, activation, position, loss, batch_size, warmup, grad_clip")
         print("\nExamples:")
         print("  python -m src.mutate attention gqa_2kv")
         print("  python -m src.mutate depth 8")
@@ -254,6 +296,9 @@ if __name__ == "__main__":
         print("  python -m src.mutate activation gelu")
         print("  python -m src.mutate position alibi")
         print("  python -m src.mutate loss focal")
+        print("  python -m src.mutate batch_size 128")
+        print("  python -m src.mutate warmup 500")
+        print("  python -m src.mutate grad_clip 0.5")
         sys.exit(1)
     
     mutation_type = sys.argv[1]
@@ -275,6 +320,12 @@ if __name__ == "__main__":
         config = mutate_position_encoding(sys.argv[2])
     elif mutation_type == "loss":
         config = mutate_loss(sys.argv[2])
+    elif mutation_type == "batch_size":
+        config = mutate_batch_size(int(sys.argv[2]))
+    elif mutation_type == "warmup":
+        config = mutate_warmup(int(sys.argv[2]))
+    elif mutation_type == "grad_clip":
+        config = mutate_grad_clip(float(sys.argv[2]))
     else:
         print(f"Unknown mutation type: {mutation_type}")
         sys.exit(1)
