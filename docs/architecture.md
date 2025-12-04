@@ -1,70 +1,79 @@
 # Architecture
 
-Foundry is autonomous ML training infrastructure. 4,668 LOC. Zero ceremony.
-
 ## Core Loop
 
 ```
 mutate → train → evaluate → promote → repeat
 ```
 
-Agents propose mutations, train in parallel, rank by capability, promote winners autonomously.
+Mutation generator creates config variants. Sweep runner trains in parallel, ranks by eval task, promotes winners.
 
 ## Components
 
-### Model (`foundry/model.py` - 374 LOC)
+### Model (`foundry/model.py`)
 - GPT architecture with swappable components
 - Config validation prevents invalid combinations
 - Modular: attention, norm, activation, position, loss
 - Gradient checkpointing for memory efficiency
-- 26 variants across `foundry/modules/`
 
-### Training (`foundry/train.py` - 360 LOC)
+### Training (`foundry/train.py`)
 - Auto-distributed: Single GPU / DDP / FSDP
 - YAML config driven
 - EMA, gradient clipping, cosine LR decay
-- Outputs: checkpoints, eval metrics
+- Checkpoint resume, eval metrics
 
-### Distributed (`foundry/distributed.py` - 162 LOC)
+### Distributed (`foundry/distributed.py`)
 - Auto-detection from env vars (torchrun)
 - Strategy: auto/ddp/fsdp/none
 - DDP for <1B params, FSDP for ≥1B
 - Zero overhead on single GPU
 
-### Mutation Engine (`foundry/mutate/` - 580 LOC)
-- 26 mutation types
+### Mutation Engine (`foundry/mutate/`)
+- 21 mutation types
 - Generates YAML configs from baseline
 - CLI: `python -m foundry.mutate <type> <variant>`
-- Mutations: architecture, training, data
+- Architecture, training, data mutations
 
-### Sweep Runner (`foundry/cli/sweep.py` - 248 LOC)
+### Sweep Runner (`foundry/cli/sweep.py`)
 - Parallel training with ProcessPoolExecutor
 - Ranks by validation loss OR eval task
 - `--promote`: auto-replace baseline with winner
 - Enables autonomous iteration
 
-### Eval Harness (`foundry/benchmarks/` - 367 LOC)
+### Eval Harness (`foundry/benchmarks/`)
 - GSM8K (math reasoning)
 - MMLU (knowledge)
 - HumanEval (code generation)
 - Constitution (alignment via preference pairs)
 
-### Tokenizers (`foundry/data/tokenize.py` - 139 LOC)
-- CharTokenizer: toy datasets
-- BPETokenizer: production (byte-pair encoding)
-- Both save/load from disk
+### Data Pipeline (`foundry/data/`)
+- Tokenizers: BPE, char-level
+- Curriculum: order by length/perplexity
+- Synthetic: self-instruct generation
+- Pack: greedy bin-packing
+- Filter: dedupe, length
+- Conversation formats: ChatML, Llama3, Alpaca
+- Constitution injection
+- Preference pairs (DPO)
 
-### Model Zoo (`foundry/zoo.py` - 161 LOC)
+### Model Zoo (`foundry/zoo.py`)
 - Load pretrained configs (llama3, mistral, qwen2)
 - Convert HuggingFace → Foundry format
 - Export checkpoints
 
-## Mutation Coverage
+### CLI Tools (`foundry/cli/`)
+- sweep: parallel mutation training
+- compare: A/B test baseline vs mutation
+- lr_finder: learning rate range test
+
+## Mutations
+
+21 mutation types. 17 architecture modules.
 
 **Architecture:**
 - Attention: GQA (1kv, 2kv), MHA, MLA, MoE, sliding window, sparse
 - Depth/width scaling
-- Norm: RMSNorm, LayerNorm
+- Norm: RMSNorm, LayerNorm, QKNorm
 - Activation: SwiGLU, GELU, GLU
 - Position: RoPE, ALiBi
 - Loss: CrossEntropy, Focal, LabelSmoothing, DPO
@@ -75,10 +84,9 @@ Agents propose mutations, train in parallel, rank by capability, promote winners
 - LoRA rank/alpha/dropout
 
 **Data:**
-- Curriculum learning (length-based, perplexity-based)
-- Conversation formats (ChatML, Llama3, Alpaca)
-- Constitution injection (preference pairs)
-- Filtering (length, dedupe)
+- Conversation formats: ChatML, Llama3, Alpaca
+
+Modules: `foundry/modules/{alibi,dpo_loss,focal_loss,gelu,glu,gqa,label_smoothing,layernorm,mla,moe,qknorm,rmsnorm,rope,sliding_window,sparse_attention,swiglu}.py`
 
 ## Design Principles
 
@@ -90,15 +98,13 @@ Agents propose mutations, train in parallel, rank by capability, promote winners
 
 ## Testing
 
-181 tests covering:
-- All 26 mutation types
+Comprehensive test coverage:
+- All 21 mutation types
 - Model components (MLA, MoE, sparse attention)
-- Data pipeline (tokenizers, curriculum, conversation)
+- Data pipeline (tokenizers, curriculum, synthetic, pack, filter)
 - Eval harness (GSM8K, MMLU, HumanEval, constitution)
 - Config validation
 - Integration (checkpoint, generate, sweep)
-
-All tests pass. No flakes.
 
 ## Usage
 
@@ -119,17 +125,3 @@ while true; do
 done
 ```
 
-## What Makes This Different
-
-**nanoGPT** - Human-readable training code  
-**Foundry** - Agent-iterable mutation infrastructure
-
-Karpathy optimized for pedagogy. We optimized for recursion.
-
-The edge isn't in PyTorch code. It's in:
-- Novel architectures agents discover through mutation
-- Training dynamics agents optimize through iteration
-- Data pipelines agents instrument and modify
-- Eval loops agents tighten
-
-DeepSeek found MLA, MoE routing gains, training efficiency tricks through infrastructure control. Foundry gives agents that same surface area.

@@ -1,6 +1,6 @@
-# Foundry
+# foundry
 
-Autonomous ML training infrastructure. 4,100 LOC. Zero ceremony.
+**mutating transformers.**
 
 ## Quick Start
 
@@ -21,11 +21,9 @@ python -m foundry.cli.sweep attention mla gqa_2kv --eval-task gsm8k --promote
 mutate → train → evaluate → promote → repeat
 ```
 
-Agents propose mutations, train in parallel, rank by capability, promote winners autonomously.
-
 ## Mutations
 
-26 mutation types across architecture, training, data:
+21 mutation types across architecture, training, data:
 
 **Architecture:**
 - Attention: GQA, MLA, MoE, sliding window, sparse
@@ -41,10 +39,7 @@ Agents propose mutations, train in parallel, rank by capability, promote winners
 - LoRA rank/alpha/dropout
 
 **Data:**
-- Curriculum learning (length, perplexity)
 - Conversation formats (ChatML, Llama3, Alpaca)
-- Constitution injection (preference pairs)
-- Filtering, dedupe
 
 ## Eval Harness
 
@@ -106,11 +101,9 @@ python -m foundry.mutate lora_rank 16
 python -m foundry.train experiments/lora_r16.yaml
 ```
 
-## Tokenizers
+## Data Pipeline
 
-- **CharTokenizer** - Character-level (legacy, toy datasets)
-- **BPETokenizer** - Production (byte-pair encoding, configurable vocab_size)
-
+**Tokenizers:**
 ```python
 from foundry.data.tokenize import BPETokenizer
 
@@ -119,34 +112,32 @@ tok.fit(corpus)
 ids = tok.encode("hello world")
 ```
 
+**Curriculum:** Order training by difficulty (length, perplexity)
+
+**Synthetic:** Self-instruct generation from existing models
+
+**Pack:** Greedy bin-packing for variable-length sequences
+
+**Filter:** Dedupe (sha256), length filtering
+
 ## Structure
 
 ```
 foundry/
-├── foundry/          # Package
-│   ├── model.py      # GPT (361 LOC)
-│   ├── train.py      # Training loop (357 LOC)
-│   ├── modules/      # Swappable components
-│   ├── data/         # Tokenize, curriculum, pack
-│   ├── mutate/       # Config generation
-│   ├── benchmarks/   # Eval tasks
-│   └── cli/          # sweep, compare, lr_finder
-├── tests/            # 181 tests
-└── experiments/      # YAML configs
+├── foundry/
+│   ├── model.py       # GPT with swappable components
+│   ├── train.py       # Training loop with auto-distributed
+│   ├── modules/       # 17 architecture variants
+│   ├── data/          # Tokenize, curriculum, pack, filter, synthetic
+│   ├── mutate/        # 21 mutation generators
+│   ├── benchmarks/    # GSM8K, MMLU, HumanEval, Constitution
+│   └── cli/           # sweep, compare, lr_finder
+├── tests/
+└── experiments/
 ```
 
-## Design
+See [docs/architecture.md](docs/architecture.md) for technical details.
 
-1. **Reference grade** - All files <450 LOC, modules <75 LOC
-2. **Agent-parseable** - Zero ceremony, clear structure
-3. **Composable** - Mutations stack, configs override
-4. **Autonomous** - Sweep runner closes the loop
+## License
 
-See [docs/architecture.md](docs/architecture.md) for details.
-
-## What Makes This Different
-
-**nanoGPT** - Human-readable training code  
-**Foundry** - Agent-iterable mutation infrastructure
-
-Karpathy optimized for pedagogy. We optimized for recursion.
+Apache 2.0
