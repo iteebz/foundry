@@ -1,32 +1,33 @@
 #!/usr/bin/env python3
-"""Comparison harness for baseline vs mutation A/B testing.
+"""Comparison harness for baseline vs mutation A/B testing."""
 
-Runs two experiment configs, compares results.
-"""
-
-import argparse
 import json
 import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import Annotated
+
+import typer
+
+app = typer.Typer(add_completion=False)
 
 
 def run_experiment(experiment_path: str, out_dir: str) -> dict:
     """Run experiment YAML and extract final metrics."""
-    cmd = [sys.executable, "src/train.py", experiment_path]
+    cmd = [sys.executable, "-m", "foundry.train", experiment_path]
 
     experiment_name = Path(experiment_path).stem
-    print(f"\n{'=' * 60}")
-    print(f"Running experiment: {experiment_name}")
-    print(f"Config: {experiment_path}")
-    print(f"{'=' * 60}\n")
+    typer.echo(f"\n{'=' * 60}")
+    typer.echo(f"Running experiment: {experiment_name}")
+    typer.echo(f"Config: {experiment_path}")
+    typer.echo(f"{'=' * 60}\n")
 
     result = subprocess.run(cmd, capture_output=True, text=True)
 
     if result.returncode != 0:
-        print(f"❌ Experiment failed: {experiment_name}")
-        print(result.stderr)
+        typer.echo(f"❌ Experiment failed: {experiment_name}")
+        typer.echo(result.stderr)
         sys.exit(1)
 
     val_loss = None
@@ -50,34 +51,38 @@ def run_experiment(experiment_path: str, out_dir: str) -> dict:
     }
 
 
-def compare(baseline_path: str, mutation_path: str) -> None:
+@app.command()
+def compare_experiments(
+    baseline: Annotated[str, typer.Argument(help="Path to baseline experiment YAML")],
+    mutation: Annotated[str, typer.Argument(help="Path to mutation experiment YAML")],
+) -> None:
     """Run comparison and report winner."""
-    baseline_result = run_experiment(baseline_path, f"out/compare_{Path(baseline_path).stem}")
-    mutation_result = run_experiment(mutation_path, f"out/compare_{Path(mutation_path).stem}")
+    baseline_result = run_experiment(baseline, f"out/compare_{Path(baseline).stem}")
+    mutation_result = run_experiment(mutation, f"out/compare_{Path(mutation).stem}")
 
-    print(f"\n{'=' * 60}")
-    print("COMPARISON RESULTS")
-    print(f"{'=' * 60}\n")
+    typer.echo(f"\n{'=' * 60}")
+    typer.echo("COMPARISON RESULTS")
+    typer.echo(f"{'=' * 60}\n")
 
-    print(f"Baseline ({baseline_result['experiment']}):")
-    print(
+    typer.echo(f"Baseline ({baseline_result['experiment']}):")
+    typer.echo(
         f"  Train Loss: {baseline_result['train_loss']:.4f}"
         if baseline_result["train_loss"]
         else "  Train Loss: N/A"
     )
-    print(
+    typer.echo(
         f"  Val Loss:   {baseline_result['val_loss']:.4f}"
         if baseline_result["val_loss"]
         else "  Val Loss: N/A"
     )
 
-    print(f"\nMutation ({mutation_result['experiment']}):")
-    print(
+    typer.echo(f"\nMutation ({mutation_result['experiment']}):")
+    typer.echo(
         f"  Train Loss: {mutation_result['train_loss']:.4f}"
         if mutation_result["train_loss"]
         else "  Train Loss: N/A"
     )
-    print(
+    typer.echo(
         f"  Val Loss:   {mutation_result['val_loss']:.4f}"
         if mutation_result["val_loss"]
         else "  Val Loss: N/A"
@@ -89,14 +94,14 @@ def compare(baseline_path: str, mutation_path: str) -> None:
             / baseline_result["val_loss"]
         ) * 100
 
-        print(f"\n{'=' * 60}")
+        typer.echo(f"\n{'=' * 60}")
         if mutation_result["val_loss"] < baseline_result["val_loss"]:
-            print(f"✅ WINNER: {mutation_result['experiment']}")
-            print(f"Improvement: {improvement:.2f}%")
+            typer.echo(f"✅ WINNER: {mutation_result['experiment']}")
+            typer.echo(f"Improvement: {improvement:.2f}%")
         else:
-            print(f"❌ LOSER: {mutation_result['experiment']}")
-            print(f"Regression: {abs(improvement):.2f}%")
-        print(f"{'=' * 60}\n")
+            typer.echo(f"❌ LOSER: {mutation_result['experiment']}")
+            typer.echo(f"Regression: {abs(improvement):.2f}%")
+        typer.echo(f"{'=' * 60}\n")
 
         report = {
             "baseline": baseline_result,
@@ -112,19 +117,10 @@ def compare(baseline_path: str, mutation_path: str) -> None:
             / f"compare_{baseline_result['experiment']}_vs_{mutation_result['experiment']}.json"
         )
         report_path.write_text(json.dumps(report, indent=2))
-        print(f"Report written to: {report_path}")
+        typer.echo(f"Report written to: {report_path}")
     else:
-        print("\n⚠️  Could not extract validation loss for comparison")
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Compare two experiment configs")
-    parser.add_argument("baseline", help="Path to baseline experiment YAML")
-    parser.add_argument("mutation", help="Path to mutation experiment YAML")
-
-    args = parser.parse_args()
-    compare(args.baseline, args.mutation)
+        typer.echo("\n⚠️  Could not extract validation loss for comparison")
 
 
 if __name__ == "__main__":
-    main()
+    app()

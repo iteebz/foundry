@@ -4,12 +4,24 @@
 Generate mutations, train in parallel, rank by validation loss or eval metrics.
 """
 
-import argparse
 import json
 import subprocess
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from enum import Enum
 from pathlib import Path
+from typing import Annotated
+
+import typer
+
+app = typer.Typer(add_completion=False)
+
+
+class EvalTask(str, Enum):
+    gsm8k = "gsm8k"
+    mmlu = "mmlu"
+    humaneval = "humaneval"
+    constitution = "constitution"
 
 
 def run_eval_on_checkpoint(checkpoint_path: Path, eval_task: str) -> float:
@@ -118,7 +130,7 @@ def train_mutation(experiment_path: Path, eval_task: str | None = None) -> dict:
     return metrics
 
 
-def sweep(
+def run_sweep(
     mutation_type: str,
     variants: list[str],
     baseline_path: str,
@@ -127,18 +139,18 @@ def sweep(
     eval_task: str | None = None,
 ) -> None:
     """Run parallel sweep of mutations."""
-    print(f"Generating {len(variants)} {mutation_type} mutations...")
+    typer.echo(f"Generating {len(variants)} {mutation_type} mutations...")
 
     mutation_paths = []
     for variant in variants:
         try:
             path = generate_mutation(mutation_type, variant)
             mutation_paths.append(path)
-            print(f"  ✓ {path.stem}")
+            typer.echo(f"  ✓ {path.stem}")
         except Exception as e:
-            print(f"  ✗ Failed to generate {mutation_type} {variant}: {e}")
+            typer.echo(f"  ✗ Failed to generate {mutation_type} {variant}: {e}")
 
-    print(f"\nTraining {len(mutation_paths)} mutations in parallel (jobs={jobs})...")
+    typer.echo(f"\nTraining {len(mutation_paths)} mutations in parallel (jobs={jobs})...")
 
     results = []
     with ProcessPoolExecutor(max_workers=jobs) as executor:
@@ -153,16 +165,18 @@ def sweep(
                 results.append(result)
 
                 if result["status"] == "success":
-                    print(f"  ✓ {result['experiment']}: val_loss={result['val_loss']:.4f}")
+                    typer.echo(f"  ✓ {result['experiment']}: val_loss={result['val_loss']:.4f}")
                 else:
-                    print(f"  ✗ {result['experiment']}: {result.get('error', 'unknown error')}")
+                    typer.echo(
+                        f"  ✗ {result['experiment']}: {result.get('error', 'unknown error')}"
+                    )
             except Exception as e:
-                print(f"  ✗ {path.stem}: {e}")
+                typer.echo(f"  ✗ {path.stem}: {e}")
 
     successful = [r for r in results if r["status"] == "success" and r["val_loss"] is not None]
 
     if not successful:
-        print("\n❌ No successful mutations")
+        typer.echo("\n❌ No successful mutations")
         return
 
     rank_key = f"{eval_task}_score" if eval_task else "val_loss"
@@ -170,24 +184,24 @@ def sweep(
     successful.sort(key=lambda x: x.get(rank_key, 0.0), reverse=reverse)
 
     metric_name = f"{eval_task} score" if eval_task else "val_loss"
-    print(f"\n{'=' * 60}")
-    print(f"SWEEP RESULTS (ranked by {metric_name})")
-    print(f"{'=' * 60}\n")
+    typer.echo(f"\n{'=' * 60}")
+    typer.echo(f"SWEEP RESULTS (ranked by {metric_name})")
+    typer.echo(f"{'=' * 60}\n")
 
     for i, result in enumerate(successful, 1):
-        print(f"{i}. {result['experiment']}")
+        typer.echo(f"{i}. {result['experiment']}")
         if eval_task and f"{eval_task}_score" in result:
-            print(f"   {eval_task}: {result[f'{eval_task}_score']:.4f}")
-        print(f"   Val Loss: {result['val_loss']:.4f}")
-        print(f"   Train Loss: {result['train_loss']:.4f}")
+            typer.echo(f"   {eval_task}: {result[f'{eval_task}_score']:.4f}")
+        typer.echo(f"   Val Loss: {result['val_loss']:.4f}")
+        typer.echo(f"   Train Loss: {result['train_loss']:.4f}")
 
     winner = successful[0]
-    print(f"\n{'=' * 60}")
-    print(f"🏆 WINNER: {winner['experiment']}")
+    typer.echo(f"\n{'=' * 60}")
+    typer.echo(f"🏆 WINNER: {winner['experiment']}")
     if eval_task and f"{eval_task}_score" in winner:
-        print(f"   {eval_task}: {winner[f'{eval_task}_score']:.4f}")
-    print(f"   Val Loss: {winner['val_loss']:.4f}")
-    print(f"{'=' * 60}\n")
+        typer.echo(f"   {eval_task}: {winner[f'{eval_task}_score']:.4f}")
+    typer.echo(f"   Val Loss: {winner['val_loss']:.4f}")
+    typer.echo(f"{'=' * 60}\n")
 
     report = {
         "mutation_type": mutation_type,
@@ -200,7 +214,7 @@ def sweep(
     report_path = Path("out") / f"sweep_{mutation_type}.json"
     report_path.parent.mkdir(exist_ok=True)
     report_path.write_text(json.dumps(report, indent=2))
-    print(f"Report: {report_path}")
+    typer.echo(f"Report: {report_path}")
 
     if promote:
         import shutil
@@ -211,33 +225,24 @@ def sweep(
         shutil.copy(baseline_path, baseline_backup)
         shutil.copy(winner_path, baseline_path)
 
-        print(f"\n🚀 PROMOTED: {winner['experiment']} → {baseline_path}")
-        print(f"   Backup: {baseline_backup}")
+        typer.echo(f"\n🚀 PROMOTED: {winner['experiment']} → {baseline_path}")
+        typer.echo(f"   Backup: {baseline_backup}")
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Parallel mutation sweep")
-    parser.add_argument("mutation_type", help="Mutation type (attention, depth, etc)")
-    parser.add_argument("variants", nargs="+", help="Variants to test")
-    parser.add_argument("--baseline", default="experiments/baseline.yaml", help="Baseline config")
-    parser.add_argument("--jobs", type=int, default=4, help="Parallel jobs")
-    parser.add_argument("--promote", action="store_true", help="Auto-promote winner to baseline")
-    parser.add_argument(
-        "--eval-task",
-        choices=["gsm8k", "mmlu", "humaneval", "constitution"],
-        help="Rank by eval task instead of val_loss",
-    )
-
-    args = parser.parse_args()
-    sweep(
-        args.mutation_type,
-        args.variants,
-        args.baseline,
-        args.jobs,
-        args.promote,
-        args.eval_task,
-    )
+@app.command()
+def sweep(
+    mutation_type: Annotated[str, typer.Argument(help="Mutation type (attention, depth, etc)")],
+    variants: Annotated[list[str], typer.Argument(help="Variants to test")],
+    baseline: Annotated[str, typer.Option(help="Baseline config")] = "experiments/baseline.yaml",
+    jobs: Annotated[int, typer.Option(help="Parallel jobs")] = 4,
+    promote: Annotated[bool, typer.Option(help="Auto-promote winner to baseline")] = False,
+    eval_task: Annotated[
+        EvalTask | None, typer.Option(help="Rank by eval task instead of val_loss")
+    ] = None,
+):
+    """Run parallel sweep of mutations."""
+    run_sweep(mutation_type, variants, baseline, jobs, promote, eval_task)
 
 
 if __name__ == "__main__":
-    main()
+    app()

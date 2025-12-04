@@ -151,8 +151,13 @@ class Block(nn.Module):
             self.mlp = act_cls(config.n_embd, bias=config.bias)
 
     def forward(self, x):
-        if hasattr(self.config, "gradient_checkpointing") and self.config.gradient_checkpointing and self.training:
+        if (
+            hasattr(self.config, "gradient_checkpointing")
+            and self.config.gradient_checkpointing
+            and self.training
+        ):
             from torch.utils.checkpoint import checkpoint
+
             x = x + checkpoint(self.attn, self.ln_1(x), use_reentrant=False)
             x = x + checkpoint(self.mlp, self.ln_2(x), use_reentrant=False)
         else:

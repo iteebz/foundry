@@ -64,23 +64,24 @@ class MoELayer(nn.Module):
         output = torch.zeros_like(x_flat)
 
         expert_boundaries = torch.where(
-            torch.cat([
-                torch.tensor([True], device=x.device),
-                sorted_expert_indices[1:] != sorted_expert_indices[:-1]
-            ])
+            torch.cat(
+                [
+                    torch.tensor([True], device=x.device),
+                    sorted_expert_indices[1:] != sorted_expert_indices[:-1],
+                ]
+            )
         )[0]
-        expert_boundaries = torch.cat([
-            expert_boundaries,
-            torch.tensor([len(sorted_expert_indices)], device=x.device)
-        ])
+        expert_boundaries = torch.cat(
+            [expert_boundaries, torch.tensor([len(sorted_expert_indices)], device=x.device)]
+        )
 
         for i in range(len(expert_boundaries) - 1):
             start_idx = expert_boundaries[i]
             end_idx = expert_boundaries[i + 1]
-            
+
             if start_idx >= end_idx:
                 continue
-                
+
             expert_id = sorted_expert_indices[start_idx].item()
             batch_tokens = sorted_token_indices[start_idx:end_idx]
             batch_weights = sorted_weights[start_idx:end_idx]

@@ -76,7 +76,7 @@ class RunConfig:
             raw = yaml.safe_load(f)
 
         name = raw.get("name", path.stem)
-        
+
         model_args = raw.get("model_args", {})
         model_config = GPTConfig(**model_args)
 

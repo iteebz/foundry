@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-"""LR Finder: Find optimal learning rate using Leslie Smith's method.
-
-Usage:
-    python lr_finder.py --model=v2 --dataset=shakespeare_char
-"""
+"""LR Finder: Find optimal learning rate using Leslie Smith's method."""
 
 import math
-import sys
+import pickle
+from contextlib import nullcontext
 from pathlib import Path
+from typing import Annotated
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import typer
+
+app = typer.Typer(add_completion=False)
 
 
 def lr_find(model, get_batch, device, ctx, min_lr=1e-7, max_lr=10, num_steps=100, beta=0.98):
@@ -53,7 +54,7 @@ def lr_find(model, get_batch, device, ctx, min_lr=1e-7, max_lr=10, num_steps=100
             best_loss = smoothed_loss
 
         if smoothed_loss > 4 * best_loss or math.isnan(smoothed_loss):
-            print(f"Stopping early at step {step} (loss diverged)")
+            typer.echo(f"Stopping early at step {step} (loss diverged)")
             break
 
     return lrs, losses
@@ -82,26 +83,19 @@ def plot_lr_find(lrs, losses, out_path="out/lr_find.png"):
     plt.legend()
 
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
-    print(f"Plot saved to {out_path}")
-    print(f"Suggested learning rate: {suggested_lr:.2e}")
+    typer.echo(f"Plot saved to {out_path}")
+    typer.echo(f"Suggested learning rate: {suggested_lr:.2e}")
 
     return suggested_lr
 
 
-def main():
-    import pickle
-    from contextlib import nullcontext
-
-    dataset = "shakespeare_char"
-    model_type = "v2"
-    batch_size = 12
-    block_size = 1024
-
-    for arg in sys.argv[1:]:
-        if arg.startswith("--dataset="):
-            dataset = arg.split("=")[1]
-        elif arg.startswith("--model="):
-            model_type = arg.split("=")[1]
+@app.command()
+def find_lr(
+    dataset: Annotated[str, typer.Option(help="Dataset name")] = "shakespeare_char",
+    model: Annotated[str, typer.Option(help="Model version (v1 or v2)")] = "v2",
+    batch_size: Annotated[int, typer.Option(help="Batch size")] = 12,
+    block_size: Annotated[int, typer.Option(help="Block size")] = 1024,
+):
 
     device = (
         "cuda"
@@ -135,10 +129,10 @@ def main():
     else:
         vocab_size = 50304
 
-    print(f"Initializing {model_type} model with vocab_size={vocab_size}")
+    typer.echo(f"Initializing {model} model with vocab_size={vocab_size}")
 
-    if model_type == "v1":
-        from model import GPT, GPTConfig
+    if model == "v1":
+        from foundry.model import GPT, GPTConfig
 
         config = GPTConfig(
             n_layer=6,
@@ -149,8 +143,8 @@ def main():
             bias=False,
             dropout=0.0,
         )
-    elif model_type == "v2":
-        from model_v2 import GPT, GPTConfig
+    elif model == "v2":
+        from foundry.model import GPT, GPTConfig
 
         config = GPTConfig(
             n_layer=6,
@@ -163,7 +157,7 @@ def main():
             dropout=0.0,
         )
     else:
-        raise ValueError(f"Unknown model: {model_type}")
+        raise ValueError(f"Unknown model: {model}")
 
     model = GPT(config).to(device)
 
@@ -183,13 +177,13 @@ def main():
             x, y = x.to(device), y.to(device)
         return x, y
 
-    print("Running LR finder...")
+    typer.echo("Running LR finder...")
     lrs, losses = lr_find(model, get_batch, device, ctx)
     suggested_lr = plot_lr_find(lrs, losses)
 
-    print("\nRecommended config:")
-    print(f"learning_rate = {suggested_lr:.2e}")
+    typer.echo("\nRecommended config:")
+    typer.echo(f"learning_rate = {suggested_lr:.2e}")
 
 
 if __name__ == "__main__":
-    main()
+    app()

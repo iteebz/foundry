@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Sample from a trained model checkpoint."""
 
-import argparse
 import os
 import pickle
+from typing import Annotated
 
 import torch
+import typer
+
+app = typer.Typer(add_completion=False)
 
 
 def load_checkpoint(ckpt_path: str, device: str = "cpu"):
@@ -14,11 +17,7 @@ def load_checkpoint(ckpt_path: str, device: str = "cpu"):
     model_args = checkpoint["model_args"]
     config = checkpoint.get("config", {})
 
-    model_type = config.get("model", "v1")
-    if model_type == "v2" or "n_kv_head" in model_args:
-        from model_v2 import GPT, GPTConfig
-    else:
-        from model import GPT, GPTConfig
+    from foundry.model import GPT, GPTConfig
 
     gptconf = GPTConfig(**model_args)
     model = GPT(gptconf)
@@ -48,14 +47,15 @@ def load_meta(meta_path: str):
     return meta["stoi"], meta["itos"]
 
 
+@app.command()
 def generate(
-    ckpt_path: str,
-    prompt: str = "\n",
-    num_samples: int = 1,
-    max_new_tokens: int = 500,
-    temperature: float = 0.8,
-    top_k: int = 200,
-    seed: int = 1337,
+    ckpt: Annotated[str, typer.Option(help="Checkpoint path")] = "out/ckpt.pt",
+    prompt: Annotated[str, typer.Option(help="Prompt string")] = "\n",
+    num_samples: Annotated[int, typer.Option(help="Number of samples")] = 1,
+    max_new_tokens: Annotated[int, typer.Option(help="Tokens to generate")] = 500,
+    temperature: Annotated[float, typer.Option(help="Sampling temperature")] = 0.8,
+    top_k: Annotated[int, typer.Option(help="Top-k sampling")] = 200,
+    seed: Annotated[int, typer.Option(help="Random seed")] = 1337,
 ):
     """Generate text from checkpoint."""
     torch.manual_seed(seed)
@@ -67,10 +67,10 @@ def generate(
         else "cpu"
     )
 
-    model, model_args = load_checkpoint(ckpt_path, device)
+    model, model_args = load_checkpoint(ckpt, device)
 
     meta_path = os.path.join(
-        os.path.dirname(ckpt_path), "..", "data", "shakespeare_char", "meta.pkl"
+        os.path.dirname(ckpt), "..", "data", "shakespeare_char", "meta.pkl"
     )
     if not os.path.exists(meta_path):
         meta_path = "data/shakespeare_char/meta.pkl"
@@ -89,27 +89,9 @@ def generate(
     with torch.no_grad():
         for _k in range(num_samples):
             y = model.generate(x, max_new_tokens, temperature=temperature, top_k=top_k)
-            print(decode(y[0].tolist()))
-            print("---------------")
+            typer.echo(decode(y[0].tolist()))
+            typer.echo("---------------")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Generate text from checkpoint")
-    parser.add_argument("--ckpt", type=str, default="out/ckpt.pt", help="checkpoint path")
-    parser.add_argument("--prompt", type=str, default="\n", help="prompt string")
-    parser.add_argument("--num_samples", type=int, default=1, help="number of samples")
-    parser.add_argument("--max_new_tokens", type=int, default=500, help="tokens to generate")
-    parser.add_argument("--temperature", type=float, default=0.8, help="sampling temperature")
-    parser.add_argument("--top_k", type=int, default=200, help="top-k sampling")
-    parser.add_argument("--seed", type=int, default=1337, help="random seed")
-
-    args = parser.parse_args()
-    generate(
-        args.ckpt,
-        args.prompt,
-        args.num_samples,
-        args.max_new_tokens,
-        args.temperature,
-        args.top_k,
-        args.seed,
-    )
+    app()

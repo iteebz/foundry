@@ -1,6 +1,8 @@
 """CLI entrypoint for mutation generation."""
 
-import sys
+from typing import Annotated
+
+import typer
 
 from . import (
     mutate_activation,
@@ -27,99 +29,185 @@ from . import (
     save_mutation,
 )
 
+app = typer.Typer(add_completion=False, no_args_is_help=True)
+
+
+@app.command()
+def attention(variant: Annotated[str, typer.Argument(help="gqa_2kv|gqa_1kv|mha")]):
+    """Mutate attention mechanism."""
+    path = save_mutation(mutate_attention(variant))
+    typer.echo(f"\nGenerated: {path}")
+    typer.echo(f"Run with: python -m foundry.train {path}")
+
+
+@app.command()
+def depth(layers: Annotated[int, typer.Argument(help="Number of transformer layers")]):
+    """Mutate model depth."""
+    path = save_mutation(mutate_depth(layers))
+    typer.echo(f"\nGenerated: {path}")
+    typer.echo(f"Run with: python -m foundry.train {path}")
+
+
+@app.command()
+def width(dim: Annotated[int, typer.Argument(help="Embedding dimension")]):
+    """Mutate model width."""
+    path = save_mutation(mutate_width(dim))
+    typer.echo(f"\nGenerated: {path}")
+    typer.echo(f"Run with: python -m foundry.train {path}")
+
+
+@app.command()
+def lr(rate: Annotated[float, typer.Argument(help="Learning rate")]):
+    """Mutate learning rate."""
+    path = save_mutation(mutate_lr(rate))
+    typer.echo(f"\nGenerated: {path}")
+    typer.echo(f"Run with: python -m foundry.train {path}")
+
+
+@app.command()
+def norm(variant: Annotated[str, typer.Argument(help="rmsnorm|layernorm")]):
+    """Mutate normalization layer."""
+    path = save_mutation(mutate_norm(variant))
+    typer.echo(f"\nGenerated: {path}")
+    typer.echo(f"Run with: python -m foundry.train {path}")
+
+
+@app.command()
+def activation(variant: Annotated[str, typer.Argument(help="swiglu|gelu|glu")]):
+    """Mutate activation function."""
+    path = save_mutation(mutate_activation(variant))
+    typer.echo(f"\nGenerated: {path}")
+    typer.echo(f"Run with: python -m foundry.train {path}")
+
+
+@app.command()
+def position(variant: Annotated[str, typer.Argument(help="rope|alibi")]):
+    """Mutate position encoding."""
+    path = save_mutation(mutate_position_encoding(variant))
+    typer.echo(f"\nGenerated: {path}")
+    typer.echo(f"Run with: python -m foundry.train {path}")
+
+
+@app.command()
+def loss(variant: Annotated[str, typer.Argument(help="cross_entropy|focal|label_smoothing|dpo")]):
+    """Mutate loss function."""
+    path = save_mutation(mutate_loss(variant))
+    typer.echo(f"\nGenerated: {path}")
+    typer.echo(f"Run with: python -m foundry.train {path}")
+
+
+@app.command()
+def batch_size(size: Annotated[int, typer.Argument(help="Batch size")]):
+    """Mutate batch size."""
+    path = save_mutation(mutate_batch_size(size))
+    typer.echo(f"\nGenerated: {path}")
+    typer.echo(f"Run with: python -m foundry.train {path}")
+
+
+@app.command()
+def warmup(iters: Annotated[int, typer.Argument(help="Warmup iterations")]):
+    """Mutate warmup schedule."""
+    path = save_mutation(mutate_warmup(iters))
+    typer.echo(f"\nGenerated: {path}")
+    typer.echo(f"Run with: python -m foundry.train {path}")
+
+
+@app.command()
+def grad_clip(max_norm: Annotated[float, typer.Argument(help="Max gradient norm")]):
+    """Mutate gradient clipping."""
+    path = save_mutation(mutate_grad_clip(max_norm))
+    typer.echo(f"\nGenerated: {path}")
+    typer.echo(f"Run with: python -m foundry.train {path}")
+
+
+@app.command()
+def weight_decay(value: Annotated[float, typer.Argument(help="Weight decay coefficient")]):
+    """Mutate weight decay."""
+    path = save_mutation(mutate_weight_decay(value))
+    typer.echo(f"\nGenerated: {path}")
+    typer.echo(f"Run with: python -m foundry.train {path}")
+
+
+@app.command()
+def adam_betas(
+    beta1: Annotated[float, typer.Argument(help="Adam beta1")],
+    beta2: Annotated[float, typer.Argument(help="Adam beta2")],
+):
+    """Mutate Adam optimizer betas."""
+    path = save_mutation(mutate_adam_betas(beta1, beta2))
+    typer.echo(f"\nGenerated: {path}")
+    typer.echo(f"Run with: python -m foundry.train {path}")
+
+
+@app.command()
+def lora_rank(r: Annotated[int, typer.Argument(help="LoRA rank")]):
+    """Mutate LoRA rank."""
+    path = save_mutation(mutate_lora_rank(r))
+    typer.echo(f"\nGenerated: {path}")
+    typer.echo(f"Run with: python -m foundry.train {path}")
+
+
+@app.command()
+def lora_alpha(alpha: Annotated[int, typer.Argument(help="LoRA alpha scaling")]):
+    """Mutate LoRA alpha."""
+    path = save_mutation(mutate_lora_alpha(alpha))
+    typer.echo(f"\nGenerated: {path}")
+    typer.echo(f"Run with: python -m foundry.train {path}")
+
+
+@app.command()
+def lora_dropout(p: Annotated[float, typer.Argument(help="LoRA dropout probability")]):
+    """Mutate LoRA dropout."""
+    path = save_mutation(mutate_lora_dropout(p))
+    typer.echo(f"\nGenerated: {path}")
+    typer.echo(f"Run with: python -m foundry.train {path}")
+
+
+@app.command()
+def conversation_format(variant: Annotated[str, typer.Argument(help="chatml|llama3|alpaca")]):
+    """Mutate conversation format."""
+    path = save_mutation(mutate_conversation_format(variant))
+    typer.echo(f"\nGenerated: {path}")
+    typer.echo(f"Run with: python -m foundry.train {path}")
+
+
+@app.command()
+def mla(latent_dim: Annotated[int | None, typer.Argument(help="Latent dimension")] = None):
+    """Mutate to Multi-Latent Attention."""
+    path = save_mutation(mutate_mla(latent_dim))
+    typer.echo(f"\nGenerated: {path}")
+    typer.echo(f"Run with: python -m foundry.train {path}")
+
+
+@app.command()
+def moe(
+    n_experts: Annotated[int, typer.Argument(help="Number of experts")] = 8,
+    top_k: Annotated[int, typer.Argument(help="Top-k routing")] = 2,
+):
+    """Mutate to Mixture of Experts."""
+    path = save_mutation(mutate_moe(n_experts, top_k))
+    typer.echo(f"\nGenerated: {path}")
+    typer.echo(f"Run with: python -m foundry.train {path}")
+
+
+@app.command()
+def sliding_window(window_size: Annotated[int, typer.Argument(help="Window size")] = 256):
+    """Mutate to sliding window attention."""
+    path = save_mutation(mutate_sliding_window(window_size))
+    typer.echo(f"\nGenerated: {path}")
+    typer.echo(f"Run with: python -m foundry.train {path}")
+
+
+@app.command()
+def sparse_attention(
+    block_size: Annotated[int, typer.Argument(help="Block size")] = 64,
+    stride: Annotated[int | None, typer.Argument(help="Stride")] = None,
+):
+    """Mutate to sparse attention."""
+    path = save_mutation(mutate_sparse_attention(block_size, stride))
+    typer.echo(f"\nGenerated: {path}")
+    typer.echo(f"Run with: python -m foundry.train {path}")
+
+
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python -m foundry.mutate <type> [variant]")
-        print("\nArchitecture:")
-        print("  attention gqa_2kv|gqa_1kv|mha")
-        print("  depth <layers>")
-        print("  width <dim>")
-        print("  norm rmsnorm|layernorm")
-        print("  activation swiglu|gelu|glu")
-        print("  position rope|alibi")
-        print("  loss cross_entropy|focal|label_smoothing|dpo")
-        print("  mla <latent_dim>")
-        print("  moe <n_experts> <top_k>")
-        print("  sliding_window <size>")
-        print("  sparse_attention <block> <stride>")
-        print("\nTraining:")
-        print("  lr <rate>")
-        print("  batch_size <size>")
-        print("  warmup <iters>")
-        print("  grad_clip <max>")
-        print("  weight_decay <value>")
-        print("  adam_betas <beta1> <beta2>")
-        print("  lora_rank <r>")
-        print("  lora_alpha <alpha>")
-        print("  lora_dropout <p>")
-        print("\nData:")
-        print("  conversation_format chatml|llama3|alpaca")
-        print("  curriculum length|perplexity linear|step <stages>")
-        print("  constitution <path>")
-        print("  data_filter <min> <max> --dedupe")
-        print("\nExamples:")
-        print("  python -m foundry.mutate attention mla")
-        print("  python -m foundry.mutate moe 8 2")
-        print("  python -m foundry.mutate curriculum length linear 4")
-        sys.exit(1)
-
-    mutation_type = sys.argv[1]
-
-    if mutation_type == "attention":
-        config = mutate_attention(sys.argv[2])
-    elif mutation_type == "depth":
-        config = mutate_depth(int(sys.argv[2]))
-    elif mutation_type == "width":
-        config = mutate_width(int(sys.argv[2]))
-    elif mutation_type == "lr":
-        config = mutate_lr(float(sys.argv[2]))
-    elif mutation_type == "norm":
-        config = mutate_norm(sys.argv[2])
-    elif mutation_type == "activation":
-        config = mutate_activation(sys.argv[2])
-    elif mutation_type == "position":
-        config = mutate_position_encoding(sys.argv[2])
-    elif mutation_type == "loss":
-        config = mutate_loss(sys.argv[2])
-    elif mutation_type == "batch_size":
-        config = mutate_batch_size(int(sys.argv[2]))
-    elif mutation_type == "warmup":
-        config = mutate_warmup(int(sys.argv[2]))
-    elif mutation_type == "grad_clip":
-        config = mutate_grad_clip(float(sys.argv[2]))
-    elif mutation_type == "weight_decay":
-        config = mutate_weight_decay(float(sys.argv[2]))
-    elif mutation_type == "adam_betas":
-        if len(sys.argv) < 4:
-            print("adam_betas requires two arguments: beta1 beta2")
-            sys.exit(1)
-        config = mutate_adam_betas(float(sys.argv[2]), float(sys.argv[3]))
-    elif mutation_type == "lora_rank":
-        config = mutate_lora_rank(int(sys.argv[2]))
-    elif mutation_type == "lora_alpha":
-        config = mutate_lora_alpha(int(sys.argv[2]))
-    elif mutation_type == "lora_dropout":
-        config = mutate_lora_dropout(float(sys.argv[2]))
-    elif mutation_type == "conversation_format":
-        config = mutate_conversation_format(sys.argv[2])
-    elif mutation_type == "mla":
-        latent_dim = int(sys.argv[2]) if len(sys.argv) > 2 else None
-        config = mutate_mla(latent_dim)
-    elif mutation_type == "moe":
-        n_experts = int(sys.argv[2]) if len(sys.argv) > 2 else 8
-        top_k = int(sys.argv[3]) if len(sys.argv) > 3 else 2
-        config = mutate_moe(n_experts, top_k)
-    elif mutation_type == "sliding_window":
-        window_size = int(sys.argv[2]) if len(sys.argv) > 2 else 256
-        config = mutate_sliding_window(window_size)
-    elif mutation_type == "sparse_attention":
-        block_size = int(sys.argv[2]) if len(sys.argv) > 2 else 64
-        stride = int(sys.argv[3]) if len(sys.argv) > 3 else None
-        config = mutate_sparse_attention(block_size, stride)
-    else:
-        print(f"Unknown mutation type: {mutation_type}")
-        sys.exit(1)
-
-    path = save_mutation(config)
-    print(f"\nGenerated: {path}")
-    print(f"Run with: python src/train.py {path}")
+    app()
