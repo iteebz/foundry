@@ -69,9 +69,10 @@ def generate(
 
     model, model_args = load_checkpoint(ckpt, device)
 
-    meta_path = os.path.join(os.path.dirname(ckpt), "..", "data", "shakespeare_char", "meta.pkl")
+    checkpoint_dir = os.path.dirname(ckpt)
+    meta_path = os.path.join(checkpoint_dir, "meta.pkl")
     if not os.path.exists(meta_path):
-        meta_path = "data/shakespeare_char/meta.pkl"
+        raise FileNotFoundError(f"meta.pkl not found at {meta_path}")
 
     stoi, itos = load_meta(meta_path)
 

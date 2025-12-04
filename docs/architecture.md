@@ -1,6 +1,6 @@
 # Architecture
 
-Foundry is autonomous ML training infrastructure. 4,100 LOC. Zero ceremony.
+Foundry is autonomous ML training infrastructure. 4,668 LOC. Zero ceremony.
 
 ## Core Loop
 
@@ -12,17 +12,24 @@ Agents propose mutations, train in parallel, rank by capability, promote winners
 
 ## Components
 
-### Model (`foundry/model.py` - 361 LOC)
+### Model (`foundry/model.py` - 374 LOC)
 - GPT architecture with swappable components
 - Config validation prevents invalid combinations
 - Modular: attention, norm, activation, position, loss
+- Gradient checkpointing for memory efficiency
 - 26 variants across `foundry/modules/`
 
-### Training (`foundry/train.py` - 357 LOC)
-- Single GPU + DDP support
+### Training (`foundry/train.py` - 360 LOC)
+- Auto-distributed: Single GPU / DDP / FSDP
 - YAML config driven
 - EMA, gradient clipping, cosine LR decay
 - Outputs: checkpoints, eval metrics
+
+### Distributed (`foundry/distributed.py` - 162 LOC)
+- Auto-detection from env vars (torchrun)
+- Strategy: auto/ddp/fsdp/none
+- DDP for <1B params, FSDP for ≥1B
+- Zero overhead on single GPU
 
 ### Mutation Engine (`foundry/mutate/` - 580 LOC)
 - 26 mutation types
@@ -30,7 +37,7 @@ Agents propose mutations, train in parallel, rank by capability, promote winners
 - CLI: `python -m foundry.mutate <type> <variant>`
 - Mutations: architecture, training, data
 
-### Sweep Runner (`foundry/cli/sweep.py` - 234 LOC)
+### Sweep Runner (`foundry/cli/sweep.py` - 248 LOC)
 - Parallel training with ProcessPoolExecutor
 - Ranks by validation loss OR eval task
 - `--promote`: auto-replace baseline with winner

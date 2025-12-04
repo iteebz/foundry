@@ -122,7 +122,7 @@ def init_distributed(backend: str = "nccl") -> tuple[bool, int, int]:
         if not torch.cuda.is_available() and backend == "nccl":
             backend = "gloo"
             if rank == 0:
-                print(f"Switching to gloo backend (CPU-only mode)")
+                print("Switching to gloo backend (CPU-only mode)")
 
         torch.distributed.init_process_group(backend=backend)
 

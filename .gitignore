@@ -6,3 +6,6 @@ build/
 .venv/
 *.egg
 .pytest_cache/
+data/*/
+!data/README.md
+out/

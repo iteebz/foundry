@@ -108,8 +108,8 @@ python -m foundry.train experiments/lora_r16.yaml
 
 ## Tokenizers
 
-- **CharTokenizer** - Toy datasets (Shakespeare)
-- **BPETokenizer** - Production (configurable vocab_size)
+- **CharTokenizer** - Character-level (legacy, toy datasets)
+- **BPETokenizer** - Production (byte-pair encoding, configurable vocab_size)
 
 ```python
 from foundry.data.tokenize import BPETokenizer

@@ -91,7 +91,7 @@ def plot_lr_find(lrs, losses, out_path="out/lr_find.png"):
 
 @app.command()
 def find_lr(
-    dataset: Annotated[str, typer.Option(help="Dataset name")] = "shakespeare_char",
+    dataset: Annotated[str, typer.Option(help="Dataset name")] = "openwebtext",
     model: Annotated[str, typer.Option(help="Model version (v1 or v2)")] = "v2",
     batch_size: Annotated[int, typer.Option(help="Batch size")] = 12,
     block_size: Annotated[int, typer.Option(help="Block size")] = 1024,

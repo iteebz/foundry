@@ -10,7 +10,7 @@ from foundry.model import GPTConfig
 
 @dataclass
 class DataConfig:
-    dataset: str = "shakespeare_char"
+    dataset: str = "openwebtext"
     batch_size: int = 64
     block_size: int = 256
 

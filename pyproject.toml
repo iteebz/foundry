@@ -40,6 +40,7 @@ ignore = [
     "N806",    # variable-name-lowercase (B, T, C, N, L, H, Q common in ML)
     "N803",    # argument-name-lowercase (X, Y common in ML)
     "N812",    # lowercase-imported-as-non-lowercase (F for functional)
+    "N817",    # CamelCase-imported-as-acronym (DDP, FSDP standard in PyTorch)
 ]
 
 [tool.pytest.ini_options]
