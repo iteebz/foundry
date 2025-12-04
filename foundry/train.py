@@ -10,8 +10,11 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from torch.utils.data import DataLoader
+from torch.utils.data.distributed import DistributedSampler
 
 from foundry.config import RunConfig
+from foundry.data.dataset import TokenDataset
 from foundry.distributed import (
     cleanup_distributed,
     init_distributed,
@@ -21,30 +24,6 @@ from foundry.distributed import (
 from foundry.eval import evaluate
 from foundry.metrics import MetricLogger
 from foundry.model import GPT
-
-
-def get_batch(split, data_dir, block_size, batch_size, device):
-    """Load a batch of data."""
-    if split == "train":
-        data = np.memmap(os.path.join(data_dir, "train.bin"), dtype=np.uint16, mode="r")
-    else:
-        data = np.memmap(os.path.join(data_dir, "val.bin"), dtype=np.uint16, mode="r")
-
-    ix = torch.randint(len(data) - block_size, (batch_size,))
-    x = torch.stack([torch.from_numpy((data[i : i + block_size]).astype(np.int64)) for i in ix])
-    y = torch.stack(
-        [torch.from_numpy((data[i + 1 : i + 1 + block_size]).astype(np.int64)) for i in ix]
-    )
-
-    if "cuda" in device:
-        x, y = (
-            x.pin_memory().to(device, non_blocking=True),
-            y.pin_memory().to(device, non_blocking=True),
-        )
-    else:
-        x, y = x.to(device), y.to(device)
-
-    return x, y
 
 
 def get_lr(it, config):
@@ -179,20 +158,47 @@ def train(config_path: str | Path):
 
     raw_model = model.module if (is_ddp or is_fsdp) else model
 
+    train_dataset = TokenDataset(
+        os.path.join(data_dir, "train.bin"), block_size=config.data.block_size
+    )
+    val_dataset = TokenDataset(os.path.join(data_dir, "val.bin"), block_size=config.data.block_size)
+
+    train_sampler = DistributedSampler(train_dataset, shuffle=True) if world_size > 1 else None
+    val_sampler = DistributedSampler(val_dataset, shuffle=False) if world_size > 1 else None
+
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=config.data.batch_size,
+        sampler=train_sampler,
+        shuffle=(train_sampler is None),
+        num_workers=4,
+        pin_memory=True,
+        persistent_workers=True,
+    )
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=config.data.batch_size,
+        sampler=val_sampler,
+        shuffle=False,
+        num_workers=2,
+        pin_memory=True,
+        persistent_workers=True,
+    )
+
     @torch.no_grad()
     def estimate_loss():
         out = {}
         model.eval()
-        for split in ["train", "val"]:
-            losses = torch.zeros(config.training.eval_iters)
-            for k in range(config.training.eval_iters):
-                X, Y = get_batch(
-                    split, data_dir, config.data.block_size, config.data.batch_size, device
-                )
+        for split, loader in [("train", train_loader), ("val", val_loader)]:
+            losses = []
+            for k, (X, Y) in enumerate(loader):
+                if k >= config.training.eval_iters:
+                    break
+                X, Y = X.to(device), Y.to(device)
                 with ctx:
                     logits, loss = model(X, Y)
-                losses[k] = loss.item()
-            out[split] = losses.mean()
+                losses.append(loss.item())
+            out[split] = np.mean(losses)
         model.train()
         return out
 
@@ -209,9 +215,19 @@ def train(config_path: str | Path):
     if master_process:
         print(f"Tokens per iteration: {tokens_per_iter:,}")
 
-    X, Y = get_batch("train", data_dir, config.data.block_size, config.data.batch_size, device)
+    train_iter = iter(train_loader)
 
     while True:
+        if train_sampler is not None:
+            train_sampler.set_epoch(iter_num)
+
+        try:
+            X, Y = next(train_iter)
+        except StopIteration:
+            train_iter = iter(train_loader)
+            X, Y = next(train_iter)
+
+        X, Y = X.to(device), Y.to(device)
         lr = get_lr(iter_num, config) if config.training.decay_lr else config.training.learning_rate
         for param_group in optimizer.param_groups:
             param_group["lr"] = lr
@@ -269,10 +285,15 @@ def train(config_path: str | Path):
             with ctx:
                 logits, loss = model(X, Y)
                 loss = loss / config.training.gradient_accumulation_steps
-            X, Y = get_batch(
-                "train", data_dir, config.data.block_size, config.data.batch_size, device
-            )
             scaler.scale(loss).backward()
+
+            if micro_step < config.training.gradient_accumulation_steps - 1:
+                try:
+                    X, Y = next(train_iter)
+                except StopIteration:
+                    train_iter = iter(train_loader)
+                    X, Y = next(train_iter)
+                X, Y = X.to(device), Y.to(device)
 
         if config.training.grad_clip != 0.0:
             scaler.unscale_(optimizer)
@@ -299,11 +320,15 @@ def train(config_path: str | Path):
             break
 
     if master_process:
+
+        def batch_fn(split):
+            loader = train_loader if split == "train" else val_loader
+            for X, Y in loader:
+                yield X.to(device), Y.to(device)
+
         results = evaluate(
             raw_model,
-            lambda split: get_batch(
-                split, data_dir, config.data.block_size, config.data.batch_size, device
-            ),
+            batch_fn,
             max_iters=config.training.eval_iters,
             device=device,
             ctx=ctx,
