@@ -392,6 +392,25 @@ def mutate_moe(
     return config
 
 
+def mutate_sliding_window(
+    window_size: int = 256,
+    base_config: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Generate sliding window attention mutation.
+    
+    Args:
+        window_size: Size of attention window (attend to last N tokens)
+    """
+    config = base_config or load_baseline()
+    
+    config["name"] = f"sw{window_size}"
+    if "model_args" not in config:
+        config["model_args"] = {}
+    config["model_args"]["sliding_window_size"] = window_size
+    
+    return config
+
+
 def save_mutation(config: Dict[str, Any], output_dir: str = "experiments") -> Path:
     """Save mutation config to YAML."""
     output_path = Path(output_dir) / f"{config['name']}.yaml"
@@ -439,6 +458,7 @@ def generate_sweep(
         "conversation_format": mutate_conversation_format,
         "mla": mutate_mla,
         "moe": mutate_moe,
+        "sliding_window": mutate_sliding_window,
     }
     
     if mutation_type not in mutation_funcs:
@@ -463,13 +483,13 @@ if __name__ == "__main__":
         print("Usage: python -m src.mutate <type> [variant]")
         print("Types: attention, depth, width, lr, norm, activation, position, loss,")
         print("       batch_size, warmup, grad_clip, weight_decay, adam_betas,")
-        print("       lora_rank, lora_alpha, lora_dropout, conversation_format, mla, moe")
+        print("       lora_rank, lora_alpha, lora_dropout, conversation_format,")
+        print("       mla, moe, sliding_window")
         print("\nExamples:")
         print("  python -m src.mutate attention gqa_2kv")
-        print("  python -m src.mutate depth 8")
-        print("  python -m src.mutate lr 3e-4")
         print("  python -m src.mutate mla 192")
         print("  python -m src.mutate moe 8 2")
+        print("  python -m src.mutate sliding_window 512")
         sys.exit(1)
     
     mutation_type = sys.argv[1]
@@ -518,6 +538,9 @@ if __name__ == "__main__":
         n_experts = int(sys.argv[2]) if len(sys.argv) > 2 else 8
         top_k = int(sys.argv[3]) if len(sys.argv) > 3 else 2
         config = mutate_moe(n_experts, top_k)
+    elif mutation_type == "sliding_window":
+        window_size = int(sys.argv[2]) if len(sys.argv) > 2 else 256
+        config = mutate_sliding_window(window_size)
     else:
         print(f"Unknown mutation type: {mutation_type}")
         sys.exit(1)

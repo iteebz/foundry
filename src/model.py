@@ -16,6 +16,7 @@ from modules.glu import GLU
 from modules.gqa import GroupedQueryAttention
 from modules.mla import MultiLatentAttention
 from modules.moe import MoELayer
+from modules.sliding_window import SlidingWindowMask
 from modules.focal_loss import FocalLoss
 from modules.label_smoothing import LabelSmoothingCrossEntropy
 
@@ -30,6 +31,7 @@ class CausalSelfAttention(nn.Module):
         self.use_rope = config.position_encoding == 'rope'
         self.use_alibi = config.position_encoding == 'alibi'
         self.use_mla = config.attention_type == 'mla'
+        self.use_sliding_window = getattr(config, 'sliding_window_size', None) is not None
         
         if self.use_mla:
             self.mla = MultiLatentAttention(
@@ -53,6 +55,12 @@ class CausalSelfAttention(nn.Module):
                 self.rope = RotaryEmbedding(self.head_dim, max_seq_len=config.block_size)
             elif self.use_alibi:
                 self.alibi = ALiBi(config.n_head, max_seq_len=config.block_size)
+            
+            if self.use_sliding_window:
+                self.sliding_window = SlidingWindowMask(
+                    config.sliding_window_size,
+                    max_seq_len=config.block_size
+                )
 
     def forward(self, x):
         if self.use_mla:
@@ -76,11 +84,21 @@ class CausalSelfAttention(nn.Module):
         k = k.repeat_interleave(self.gqa.n_rep, dim=1)
         v = v.repeat_interleave(self.gqa.n_rep, dim=1)
         
+        if self.use_sliding_window:
+            sw_mask = self.sliding_window(T)
+            if attn_bias is not None:
+                attn_bias = attn_bias * sw_mask
+            else:
+                attn_bias = sw_mask
+            is_causal = False
+        else:
+            is_causal = True
+        
         y = F.scaled_dot_product_attention(
             q, k, v,
             attn_mask=attn_bias,
             dropout_p=self.gqa.attn_dropout.p if self.training else 0.0,
-            is_causal=True
+            is_causal=is_causal
         )
         
         y = y.transpose(1, 2).contiguous().view(B, T, C)
@@ -136,6 +154,7 @@ class GPTConfig:
     mlp_type: str = 'standard'
     moe_n_experts: int = 8
     moe_top_k: int = 2
+    sliding_window_size: int = None
 
 class GPT(nn.Module):
     def __init__(self, config):
