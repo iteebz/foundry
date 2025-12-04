@@ -369,6 +369,29 @@ def mutate_mla(
     return config
 
 
+def mutate_moe(
+    n_experts: int = 8,
+    top_k: int = 2,
+    base_config: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Generate MoE (Mixture of Experts) mutation.
+    
+    Args:
+        n_experts: Number of expert MLPs
+        top_k: Number of experts to route each token to
+    """
+    config = base_config or load_baseline()
+    
+    config["name"] = f"moe_{n_experts}e{top_k}k"
+    if "model_args" not in config:
+        config["model_args"] = {}
+    config["model_args"]["mlp_type"] = "moe"
+    config["model_args"]["moe_n_experts"] = n_experts
+    config["model_args"]["moe_top_k"] = top_k
+    
+    return config
+
+
 def save_mutation(config: Dict[str, Any], output_dir: str = "experiments") -> Path:
     """Save mutation config to YAML."""
     output_path = Path(output_dir) / f"{config['name']}.yaml"
@@ -415,6 +438,7 @@ def generate_sweep(
         "lora_dropout": mutate_lora_dropout,
         "conversation_format": mutate_conversation_format,
         "mla": mutate_mla,
+        "moe": mutate_moe,
     }
     
     if mutation_type not in mutation_funcs:
@@ -439,13 +463,13 @@ if __name__ == "__main__":
         print("Usage: python -m src.mutate <type> [variant]")
         print("Types: attention, depth, width, lr, norm, activation, position, loss,")
         print("       batch_size, warmup, grad_clip, weight_decay, adam_betas,")
-        print("       lora_rank, lora_alpha, lora_dropout, conversation_format, mla")
+        print("       lora_rank, lora_alpha, lora_dropout, conversation_format, mla, moe")
         print("\nExamples:")
         print("  python -m src.mutate attention gqa_2kv")
         print("  python -m src.mutate depth 8")
         print("  python -m src.mutate lr 3e-4")
-        print("  python -m src.mutate lora_rank 16")
         print("  python -m src.mutate mla 192")
+        print("  python -m src.mutate moe 8 2")
         sys.exit(1)
     
     mutation_type = sys.argv[1]
@@ -490,6 +514,10 @@ if __name__ == "__main__":
     elif mutation_type == "mla":
         latent_dim = int(sys.argv[2]) if len(sys.argv) > 2 else None
         config = mutate_mla(latent_dim)
+    elif mutation_type == "moe":
+        n_experts = int(sys.argv[2]) if len(sys.argv) > 2 else 8
+        top_k = int(sys.argv[3]) if len(sys.argv) > 3 else 2
+        config = mutate_moe(n_experts, top_k)
     else:
         print(f"Unknown mutation type: {mutation_type}")
         sys.exit(1)

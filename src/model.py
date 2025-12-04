@@ -15,6 +15,7 @@ from modules.gelu import GELU
 from modules.glu import GLU
 from modules.gqa import GroupedQueryAttention
 from modules.mla import MultiLatentAttention
+from modules.moe import MoELayer
 from modules.focal_loss import FocalLoss
 from modules.label_smoothing import LabelSmoothingCrossEntropy
 
@@ -94,13 +95,22 @@ class Block(nn.Module):
         self.attn = CausalSelfAttention(config)
         self.ln_2 = norm_cls(config.n_embd, bias=config.bias) if config.norm_type == 'layernorm' else norm_cls(config.n_embd)
         
-        activation_map = {
-            'swiglu': SwiGLU,
-            'gelu': GELU,
-            'glu': GLU,
-        }
-        act_cls = activation_map.get(config.activation, SwiGLU)
-        self.mlp = act_cls(config.n_embd, bias=config.bias)
+        if config.mlp_type == 'moe':
+            self.mlp = MoELayer(
+                config.n_embd,
+                n_experts=getattr(config, 'moe_n_experts', 8),
+                top_k=getattr(config, 'moe_top_k', 2),
+                bias=config.bias,
+                dropout=config.dropout
+            )
+        else:
+            activation_map = {
+                'swiglu': SwiGLU,
+                'gelu': GELU,
+                'glu': GLU,
+            }
+            act_cls = activation_map.get(config.activation, SwiGLU)
+            self.mlp = act_cls(config.n_embd, bias=config.bias)
 
     def forward(self, x):
         x = x + self.attn(self.ln_1(x))
@@ -123,6 +133,9 @@ class GPTConfig:
     loss_type: str = 'cross_entropy'
     attention_type: str = 'gqa'
     mla_latent_dim: int = None
+    mlp_type: str = 'standard'
+    moe_n_experts: int = 8
+    moe_top_k: int = 2
 
 class GPT(nn.Module):
     def __init__(self, config):
