@@ -9,12 +9,13 @@ from torch.nn import functional as F
 from modules.rmsnorm import RMSNorm
 from modules.layernorm import LayerNorm
 from modules.rope import RotaryEmbedding, apply_rotary_emb
+from modules.alibi import ALiBi
 from modules.swiglu import SwiGLU
 from modules.gelu import GELU
 from modules.glu import GLU
 from modules.gqa import GroupedQueryAttention
 
-class CausalSelfAttentionRoPE(nn.Module):
+class CausalSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -22,6 +23,8 @@ class CausalSelfAttentionRoPE(nn.Module):
         self.n_kv_head = config.n_kv_head
         self.n_embd = config.n_embd
         self.head_dim = config.n_embd // config.n_head
+        self.use_rope = config.position_encoding == 'rope'
+        self.use_alibi = config.position_encoding == 'alibi'
         
         self.gqa = GroupedQueryAttention(
             config.n_embd,
@@ -30,7 +33,11 @@ class CausalSelfAttentionRoPE(nn.Module):
             bias=config.bias,
             dropout=config.dropout
         )
-        self.rope = RotaryEmbedding(self.head_dim, max_seq_len=config.block_size)
+        
+        if self.use_rope:
+            self.rope = RotaryEmbedding(self.head_dim, max_seq_len=config.block_size)
+        elif self.use_alibi:
+            self.alibi = ALiBi(config.n_head, max_seq_len=config.block_size)
 
     def forward(self, x):
         B, T, C = x.size()
@@ -39,17 +46,21 @@ class CausalSelfAttentionRoPE(nn.Module):
         k = self.gqa.k_proj(x).view(B, T, self.n_kv_head, self.head_dim).transpose(1, 2)
         v = self.gqa.v_proj(x).view(B, T, self.n_kv_head, self.head_dim).transpose(1, 2)
         
-        cos, sin = self.rope(x, T)
-        cos = cos.unsqueeze(0).unsqueeze(1)
-        sin = sin.unsqueeze(0).unsqueeze(1)
-        q, k = apply_rotary_emb(q, k, cos, sin)
+        attn_bias = None
+        if self.use_rope:
+            cos, sin = self.rope(x, T)
+            cos = cos.unsqueeze(0).unsqueeze(1)
+            sin = sin.unsqueeze(0).unsqueeze(1)
+            q, k = apply_rotary_emb(q, k, cos, sin)
+        elif self.use_alibi:
+            attn_bias = self.alibi(T)
         
         k = k.repeat_interleave(self.gqa.n_rep, dim=1)
         v = v.repeat_interleave(self.gqa.n_rep, dim=1)
         
         y = F.scaled_dot_product_attention(
             q, k, v,
-            attn_mask=None,
+            attn_mask=attn_bias,
             dropout_p=self.gqa.attn_dropout.p if self.training else 0.0,
             is_causal=True
         )
@@ -63,7 +74,7 @@ class Block(nn.Module):
         super().__init__()
         norm_cls = LayerNorm if config.norm_type == 'layernorm' else RMSNorm
         self.ln_1 = norm_cls(config.n_embd, bias=config.bias) if config.norm_type == 'layernorm' else norm_cls(config.n_embd)
-        self.attn = CausalSelfAttentionRoPE(config)
+        self.attn = CausalSelfAttention(config)
         self.ln_2 = norm_cls(config.n_embd, bias=config.bias) if config.norm_type == 'layernorm' else norm_cls(config.n_embd)
         
         activation_map = {
@@ -91,6 +102,7 @@ class GPTConfig:
     bias: bool = False
     norm_type: str = 'rmsnorm'
     activation: str = 'swiglu'
+    position_encoding: str = 'rope'
 
 class GPT(nn.Module):
     def __init__(self, config):
@@ -174,7 +186,10 @@ class GPT(nn.Module):
         assert block_size <= self.config.block_size
         self.config.block_size = block_size
         for block in self.transformer.h:
-            block.attn.rope.max_seq_len = block_size
+            if hasattr(block.attn, 'rope'):
+                block.attn.rope.max_seq_len = block_size
+            elif hasattr(block.attn, 'alibi'):
+                block.attn.alibi.max_seq_len = block_size
 
     @classmethod
     def from_pretrained(cls, model_type, override_args=None):

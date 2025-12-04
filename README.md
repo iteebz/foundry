@@ -13,8 +13,9 @@ python src/train.py experiments/baseline.yaml
 
 # Generate mutations
 python -m src.mutate attention gqa_2kv
-python -m src.mutate depth 8
-python -m src.mutate width 512
+python -m src.mutate norm layernorm
+python -m src.mutate activation gelu
+python -m src.mutate position alibi
 
 # Compare baseline vs mutation
 python compare.py experiments/baseline.yaml experiments/attn_gqa_2kv.yaml
@@ -48,17 +49,17 @@ Usage: `python src/train.py experiments/baseline.yaml`
 ```
 foundry/
 ├── experiments/
-│   ├── baseline.yaml
-│   └── modern.yaml
+│   └── baseline.yaml
 ├── src/
-│   ├── model.py        # GPT (RoPE+GQA+RMSNorm+SwiGLU)
+│   ├── model.py
 │   ├── model_factory.py
 │   ├── train.py
+│   ├── mutate.py
 │   └── modules/
-│       ├── rope.py
+│       ├── rope.py, alibi.py
 │       ├── gqa.py
-│       ├── rmsnorm.py
-│       └── swiglu.py
+│       ├── rmsnorm.py, layernorm.py, qknorm.py
+│       └── swiglu.py, gelu.py, glu.py
 └── tests/
 ```
 
@@ -67,28 +68,43 @@ foundry/
 Generate experiment configs programmatically:
 
 ```bash
-# Attention variants
-python -m src.mutate attention gqa_2kv  # 2 KV heads
-python -m src.mutate attention gqa_1kv  # 1 KV head (near-MQA)
-python -m src.mutate attention mha      # Multi-head (baseline)
+# Attention
+python -m src.mutate attention gqa_2kv
+python -m src.mutate attention mha
 
-# Architecture scaling
-python -m src.mutate depth 8            # 8 layers
-python -m src.mutate width 512          # 512 embedding dim
+# Architecture
+python -m src.mutate depth 8
+python -m src.mutate width 512
 
-# Training hyperparameters
-python -m src.mutate lr 3e-4            # Learning rate
+# Normalization
+python -m src.mutate norm layernorm
+python -m src.mutate norm rmsnorm
+
+# Activation
+python -m src.mutate activation gelu
+python -m src.mutate activation glu
+
+# Position encoding
+python -m src.mutate position alibi
+python -m src.mutate position rope
+
+# Hyperparameters
+python -m src.mutate lr 3e-4
 ```
 
 Mutations saved to `experiments/*.yaml`, ready for training.
 
 ### Mutation Surfaces
 
-1. **Attention** - GQA, MHA (implemented), MLA, sliding window, sparse
-2. **Depth/Width** - Layer/embedding scaling (implemented)
-3. **Hyperparameters** - LR, batch size, warmup (LR implemented)
-4. **Position Encoding** - RoPE (current), ALiBi, learned
-5. **Activations** - SwiGLU (current), GELU, GLU variants
-6. **Normalization** - RMSNorm (current), LayerNorm, QKNorm
-7. **Loss** - CrossEntropy (current), focal, label smoothing
-8. **Data Pipeline** - Curriculum, filtering, packing
+**Implemented:**
+1. **Attention** - GQA (2kv, 1kv), MHA
+2. **Depth/Width** - Layer/embedding scaling
+3. **Normalization** - RMSNorm, LayerNorm, QKNorm
+4. **Activation** - SwiGLU, GELU, GLU
+5. **Position Encoding** - RoPE, ALiBi
+6. **Hyperparameters** - Learning rate
+
+**Remaining:**
+- Loss functions (focal, label smoothing)
+- Data pipeline (curriculum, filtering, packing)
+- Advanced attention (MLA, sliding window, sparse)
