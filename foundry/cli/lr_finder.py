@@ -96,7 +96,6 @@ def find_lr(
     batch_size: Annotated[int, typer.Option(help="Batch size")] = 12,
     block_size: Annotated[int, typer.Option(help="Block size")] = 1024,
 ):
-
     device = (
         "cuda"
         if torch.cuda.is_available()

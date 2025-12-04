@@ -15,7 +15,7 @@ def load_checkpoint(ckpt_path: str, device: str = "cpu"):
     """Load model from checkpoint."""
     checkpoint = torch.load(ckpt_path, map_location=device, weights_only=False)
     model_args = checkpoint["model_args"]
-    config = checkpoint.get("config", {})
+    checkpoint.get("config", {})
 
     from foundry.model import GPT, GPTConfig
 
@@ -69,9 +69,7 @@ def generate(
 
     model, model_args = load_checkpoint(ckpt, device)
 
-    meta_path = os.path.join(
-        os.path.dirname(ckpt), "..", "data", "shakespeare_char", "meta.pkl"
-    )
+    meta_path = os.path.join(os.path.dirname(ckpt), "..", "data", "shakespeare_char", "meta.pkl")
     if not os.path.exists(meta_path):
         meta_path = "data/shakespeare_char/meta.pkl"
 

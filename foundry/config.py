@@ -42,6 +42,8 @@ class TrainingConfig:
     compile: bool = True
     compile_mode: str = "default"
     gradient_checkpointing: bool = False
+    distributed: str = "auto"
+    fsdp_min_params: int = 1_000_000_000
 
 
 @dataclass

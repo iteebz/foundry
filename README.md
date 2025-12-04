@@ -69,6 +69,34 @@ model = load_pretrained("llama3-1b", device="cuda")
 
 Configs: llama3-8b, llama3-1b, mistral-7b, qwen2-7b
 
+## Distributed Training
+
+Auto-detects and configures distributed training:
+
+**Single GPU:**
+```bash
+python -m foundry.train experiments/baseline.yaml
+```
+
+**Multi-GPU (auto-selects DDP or FSDP based on model size):**
+```bash
+torchrun --nproc_per_node=4 -m foundry.train experiments/baseline.yaml
+```
+
+**Manual override:**
+```yaml
+# experiments/baseline.yaml
+training:
+  distributed: "ddp"  # or "fsdp", "auto", "none"
+  fsdp_min_params: 1000000000  # Use FSDP for models >1B params
+```
+
+**Auto-selection logic:**
+- 1 GPU/CPU → No wrapping (zero overhead)
+- Multi-GPU + <1B params → DDP
+- Multi-GPU + ≥1B params → FSDP
+- Multi-CPU → DDP with gloo (dev/testing only, slow)
+
 ## LoRA Finetuning
 
 90-99% param reduction:

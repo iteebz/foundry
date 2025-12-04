@@ -1,4 +1,4 @@
-"""Training script with single GPU and DDP support."""
+"""Training script with intelligent distributed support."""
 
 import math
 import os
@@ -9,9 +9,13 @@ from contextlib import nullcontext
 
 import numpy as np
 import torch
-from torch.distributed import destroy_process_group, init_process_group
-from torch.nn.parallel import DistributedDataParallel
 
+from foundry.distributed import (
+    cleanup_distributed,
+    init_distributed,
+    print_distributed_info,
+    wrap_model_distributed,
+)
 from foundry.eval import evaluate
 from foundry.model import GPT, GPTConfig
 
@@ -55,6 +59,8 @@ device = (
 dtype = "bfloat16" if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else "float16"
 compile = True
 compile_mode = "default"
+distributed = "auto"
+fsdp_min_params = 1_000_000_000
 lora_enabled = False
 lora_r = 8
 lora_alpha = 16
@@ -88,24 +94,16 @@ config_keys = [
 ]
 config = {k: globals()[k] for k in config_keys}
 
-ddp = int(os.environ.get("RANK", -1)) != -1
-if ddp:
-    init_process_group(backend=backend)
-    ddp_rank = int(os.environ["RANK"])
-    ddp_local_rank = int(os.environ["LOCAL_RANK"])
-    ddp_world_size = int(os.environ["WORLD_SIZE"])
-    device = f"cuda:{ddp_local_rank}"
-    torch.cuda.set_device(device)
-    master_process = ddp_rank == 0
-    seed_offset = ddp_rank
+master_process, ddp_rank, ddp_world_size = init_distributed(backend=backend)
+seed_offset = ddp_rank
+
+if ddp_world_size > 1:
     assert gradient_accumulation_steps % ddp_world_size == 0
     gradient_accumulation_steps //= ddp_world_size
-else:
-    master_process = True
-    seed_offset = 0
-    ddp_world_size = 1
+
 tokens_per_iter = gradient_accumulation_steps * ddp_world_size * batch_size * block_size
-print(f"tokens per iteration will be: {tokens_per_iter:,}")
+if master_process:
+    print(f"tokens per iteration will be: {tokens_per_iter:,}")
 
 if master_process:
     os.makedirs(out_dir, exist_ok=True)
@@ -236,14 +234,18 @@ if init_from == "resume":
     optimizer.load_state_dict(checkpoint["optimizer"])
 checkpoint = None
 
-compile_mode = globals().get("compile_mode", "default")
 if compile:
-    print(f"compiling the model with mode={compile_mode}... (takes a ~minute)")
+    if master_process:
+        print(f"compiling the model with mode={compile_mode}... (takes a ~minute)")
     unoptimized_model = model
     model = torch.compile(model, mode=compile_mode)
 
-if ddp:
-    model = DistributedDataParallel(model, device_ids=[ddp_local_rank])
+model, is_ddp, is_fsdp = wrap_model_distributed(
+    model, strategy=distributed, fsdp_min_params=fsdp_min_params
+)
+
+if master_process:
+    print_distributed_info(model, is_ddp, is_fsdp)
 
 
 @torch.no_grad()
@@ -281,7 +283,7 @@ if wandb_log and master_process:
 X, Y = get_batch("train")
 t0 = time.time()
 local_iter_num = 0
-raw_model = model.module if ddp else model
+raw_model = model.module if (is_ddp or is_fsdp) else model
 while True:
     lr = get_lr(iter_num) if decay_lr else learning_rate
     for param_group in optimizer.param_groups:
@@ -318,7 +320,7 @@ while True:
         break
 
     for micro_step in range(gradient_accumulation_steps):
-        if ddp:
+        if is_ddp:
             model.require_backward_grad_sync = micro_step == gradient_accumulation_steps - 1
         with ctx:
             logits, loss = model(X, Y)
@@ -355,5 +357,4 @@ if master_process:
         f.write(f"loss: {results['loss']}\n")
         f.write(f"perplexity: {results['perplexity']}\n")
 
-if ddp:
-    destroy_process_group()
+cleanup_distributed()
