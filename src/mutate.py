@@ -89,6 +89,30 @@ def mutate_lr(
     return config
 
 
+def mutate_norm(
+    norm_type: str = "layernorm",
+    base_config: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Generate normalization mutations.
+    
+    Variants:
+        rmsnorm: RMSNorm (default, no bias, more efficient)
+        layernorm: Standard LayerNorm (with bias option)
+    """
+    config = base_config or load_baseline()
+    
+    variants = ["rmsnorm", "layernorm"]
+    if norm_type not in variants:
+        raise ValueError(f"Unknown norm type: {norm_type}. Choose from {variants}")
+    
+    config["name"] = f"norm_{norm_type}"
+    if "model_args" not in config:
+        config["model_args"] = {}
+    config["model_args"]["norm_type"] = norm_type
+    
+    return config
+
+
 def save_mutation(config: Dict[str, Any], output_dir: str = "experiments") -> Path:
     """Save mutation config to YAML."""
     output_path = Path(output_dir) / f"{config['name']}.yaml"
@@ -120,6 +144,7 @@ def generate_sweep(
         "depth": mutate_depth,
         "width": mutate_width,
         "lr": mutate_lr,
+        "norm": mutate_norm,
     }
     
     if mutation_type not in mutation_funcs:
@@ -142,12 +167,13 @@ if __name__ == "__main__":
     
     if len(sys.argv) < 3:
         print("Usage: python -m src.mutate <type> <variant>")
-        print("Types: attention, depth, width, lr")
+        print("Types: attention, depth, width, lr, norm")
         print("\nExamples:")
         print("  python -m src.mutate attention gqa_2kv")
         print("  python -m src.mutate depth 8")
         print("  python -m src.mutate width 512")
         print("  python -m src.mutate lr 3e-4")
+        print("  python -m src.mutate norm layernorm")
         sys.exit(1)
     
     mutation_type = sys.argv[1]
@@ -161,6 +187,8 @@ if __name__ == "__main__":
         config = mutate_width(int(sys.argv[2]))
     elif mutation_type == "lr":
         config = mutate_lr(float(sys.argv[2]))
+    elif mutation_type == "norm":
+        config = mutate_norm(sys.argv[2])
     else:
         print(f"Unknown mutation type: {mutation_type}")
         sys.exit(1)

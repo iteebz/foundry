@@ -7,6 +7,7 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 from modules.rmsnorm import RMSNorm
+from modules.layernorm import LayerNorm
 from modules.rope import RotaryEmbedding, apply_rotary_emb
 from modules.swiglu import SwiGLU
 from modules.gqa import GroupedQueryAttention
@@ -58,9 +59,10 @@ class CausalSelfAttentionRoPE(nn.Module):
 class Block(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.ln_1 = RMSNorm(config.n_embd)
+        norm_cls = LayerNorm if config.norm_type == 'layernorm' else RMSNorm
+        self.ln_1 = norm_cls(config.n_embd, bias=config.bias) if config.norm_type == 'layernorm' else norm_cls(config.n_embd)
         self.attn = CausalSelfAttentionRoPE(config)
-        self.ln_2 = RMSNorm(config.n_embd)
+        self.ln_2 = norm_cls(config.n_embd, bias=config.bias) if config.norm_type == 'layernorm' else norm_cls(config.n_embd)
         self.mlp = SwiGLU(config.n_embd, bias=config.bias)
 
     def forward(self, x):
@@ -78,6 +80,7 @@ class GPTConfig:
     n_embd: int = 768
     dropout: float = 0.0
     bias: bool = False
+    norm_type: str = 'rmsnorm'
 
 class GPT(nn.Module):
     def __init__(self, config):
@@ -86,11 +89,14 @@ class GPT(nn.Module):
         assert config.block_size is not None
         self.config = config
 
+        norm_cls = LayerNorm if config.norm_type == 'layernorm' else RMSNorm
+        final_norm = norm_cls(config.n_embd, bias=config.bias) if config.norm_type == 'layernorm' else norm_cls(config.n_embd)
+        
         self.transformer = nn.ModuleDict(dict(
             wte = nn.Embedding(config.vocab_size, config.n_embd),
             drop = nn.Dropout(config.dropout),
             h = nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
-            ln_f = RMSNorm(config.n_embd),
+            ln_f = final_norm,
         ))
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         self.transformer.wte.weight = self.lm_head.weight
