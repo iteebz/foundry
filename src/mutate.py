@@ -250,6 +250,34 @@ def mutate_data_filter(
     return config
 
 
+def mutate_weight_decay(
+    weight_decay: float,
+    base_config: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Generate weight decay mutations."""
+    config = base_config or load_baseline()
+    config["name"] = f"wd_{weight_decay:.0e}"
+    if "training" not in config:
+        config["training"] = {}
+    config["training"]["weight_decay"] = weight_decay
+    return config
+
+
+def mutate_adam_betas(
+    beta1: float,
+    beta2: float,
+    base_config: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Generate Adam beta mutations."""
+    config = base_config or load_baseline()
+    config["name"] = f"adam_b1_{beta1}_b2_{beta2}"
+    if "training" not in config:
+        config["training"] = {}
+    config["training"]["beta1"] = beta1
+    config["training"]["beta2"] = beta2
+    return config
+
+
 def save_mutation(config: Dict[str, Any], output_dir: str = "experiments") -> Path:
     """Save mutation config to YAML."""
     output_path = Path(output_dir) / f"{config['name']}.yaml"
@@ -289,6 +317,8 @@ def generate_sweep(
         "warmup": mutate_warmup,
         "grad_clip": mutate_grad_clip,
         "data_filter": mutate_data_filter,
+        "weight_decay": mutate_weight_decay,
+        "adam_betas": mutate_adam_betas,
     }
     
     if mutation_type not in mutation_funcs:
@@ -311,26 +341,20 @@ if __name__ == "__main__":
     
     if len(sys.argv) < 3:
         print("Usage: python -m src.mutate <type> <variant>")
-        print("Types: attention, depth, width, lr, norm, activation, position, loss, batch_size, warmup, grad_clip")
+        print("Types: attention, depth, width, lr, norm, activation, position, loss,")
+        print("       batch_size, warmup, grad_clip, weight_decay, adam_betas")
         print("\nExamples:")
         print("  python -m src.mutate attention gqa_2kv")
         print("  python -m src.mutate depth 8")
-        print("  python -m src.mutate width 512")
         print("  python -m src.mutate lr 3e-4")
-        print("  python -m src.mutate norm layernorm")
-        print("  python -m src.mutate activation gelu")
-        print("  python -m src.mutate position alibi")
-        print("  python -m src.mutate loss focal")
-        print("  python -m src.mutate batch_size 128")
-        print("  python -m src.mutate warmup 500")
-        print("  python -m src.mutate grad_clip 0.5")
+        print("  python -m src.mutate weight_decay 1e-2")
+        print("  python -m src.mutate adam_betas 0.9 0.999")
         sys.exit(1)
     
     mutation_type = sys.argv[1]
     
     if mutation_type == "attention":
-        variant = sys.argv[2]
-        config = mutate_attention(variant)
+        config = mutate_attention(sys.argv[2])
     elif mutation_type == "depth":
         config = mutate_depth(int(sys.argv[2]))
     elif mutation_type == "width":
@@ -351,6 +375,13 @@ if __name__ == "__main__":
         config = mutate_warmup(int(sys.argv[2]))
     elif mutation_type == "grad_clip":
         config = mutate_grad_clip(float(sys.argv[2]))
+    elif mutation_type == "weight_decay":
+        config = mutate_weight_decay(float(sys.argv[2]))
+    elif mutation_type == "adam_betas":
+        if len(sys.argv) < 4:
+            print("adam_betas requires two arguments: beta1 beta2")
+            sys.exit(1)
+        config = mutate_adam_betas(float(sys.argv[2]), float(sys.argv[3]))
     else:
         print(f"Unknown mutation type: {mutation_type}")
         sys.exit(1)
