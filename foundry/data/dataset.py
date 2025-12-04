@@ -1,4 +1,4 @@
-"""PyTorch Dataset for token data with auto-detection."""
+"""PyTorch Datasets for token data with auto-detection and mixture sampling."""
 
 from pathlib import Path
 
@@ -88,3 +88,59 @@ class TokenDataset(Dataset):
             self._buffer[buffer_idx + 1 : buffer_idx + 1 + self.block_size].astype(np.int64)
         )
         return x, y
+
+
+class MixtureDataset(Dataset):
+    """Sample from multiple datasets according to weights (reference-grade)."""
+
+    def __init__(self, datasets: list[Dataset], weights: list[float], seed: int = 1337):
+        if len(datasets) != len(weights):
+            raise ValueError(f"datasets ({len(datasets)}) and weights ({len(weights)}) must match")
+        if not datasets:
+            raise ValueError("Must provide at least one dataset")
+        if any(w <= 0 for w in weights):
+            raise ValueError("All weights must be positive")
+
+        self.datasets = datasets
+        self.weights = np.array(weights, dtype=np.float32)
+        self.weights /= self.weights.sum()
+        self.seed = seed
+
+        self.indices = self._build_mixture_schedule()
+
+    def _build_mixture_schedule(self):
+        """Build deterministic sample schedule balancing dataset weights."""
+        rng = np.random.RandomState(self.seed)
+
+        total_samples = sum(len(ds) for ds in self.datasets)
+        samples_per_dataset = [
+            max(1, int(len(ds) * w)) for ds, w in zip(self.datasets, self.weights)
+        ]
+
+        indices = []
+        for ds_idx, n_samples in enumerate(samples_per_dataset):
+            dataset_size = len(self.datasets[ds_idx])
+            if n_samples > dataset_size:
+                sampled_indices = rng.choice(dataset_size, size=n_samples, replace=True)
+            else:
+                sampled_indices = rng.choice(dataset_size, size=n_samples, replace=False)
+
+            indices.extend([(ds_idx, int(idx)) for idx in sampled_indices])
+
+        rng.shuffle(indices)
+        return indices
+
+    def __len__(self):
+        return len(self.indices)
+
+    def __getitem__(self, idx):
+        ds_idx, sample_idx = self.indices[idx]
+        return self.datasets[ds_idx][sample_idx]
+
+    def resample(self, seed: int | None = None):
+        """Resample mixture schedule (call at epoch boundaries)."""
+        if seed is not None:
+            self.seed = seed
+        else:
+            self.seed += 1
+        self.indices = self._build_mixture_schedule()
