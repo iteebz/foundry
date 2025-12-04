@@ -14,6 +14,8 @@ from modules.swiglu import SwiGLU
 from modules.gelu import GELU
 from modules.glu import GLU
 from modules.gqa import GroupedQueryAttention
+from modules.focal_loss import FocalLoss
+from modules.label_smoothing import LabelSmoothingCrossEntropy
 
 class CausalSelfAttention(nn.Module):
     def __init__(self, config):
@@ -103,6 +105,7 @@ class GPTConfig:
     norm_type: str = 'rmsnorm'
     activation: str = 'swiglu'
     position_encoding: str = 'rope'
+    loss_type: str = 'cross_entropy'
 
 class GPT(nn.Module):
     def __init__(self, config):
@@ -110,6 +113,13 @@ class GPT(nn.Module):
         assert config.vocab_size is not None
         assert config.block_size is not None
         self.config = config
+        
+        loss_map = {
+            'cross_entropy': None,
+            'focal': FocalLoss(),
+            'label_smoothing': LabelSmoothingCrossEntropy(),
+        }
+        self.loss_fn = loss_map.get(config.loss_type)
 
         norm_cls = LayerNorm if config.norm_type == 'layernorm' else RMSNorm
         final_norm = norm_cls(config.n_embd, bias=config.bias) if config.norm_type == 'layernorm' else norm_cls(config.n_embd)
@@ -155,7 +165,10 @@ class GPT(nn.Module):
 
         if targets is not None:
             logits = self.lm_head(x)
-            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
+            if self.loss_fn is None:
+                loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1)
+            else:
+                loss = self.loss_fn(logits.view(-1, logits.size(-1)), targets.view(-1))
         else:
             logits = self.lm_head(x[:, [-1], :])
             loss = None
