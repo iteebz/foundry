@@ -1,12 +1,8 @@
 """Tests for sweep eval integration."""
 
-import subprocess
-import sys
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from foundry.cli.sweep import run_eval_on_checkpoint
 
@@ -46,15 +42,8 @@ def test_run_eval_on_checkpoint_timeout():
         checkpoint_path.write_text("dummy")
 
         with patch("subprocess.run") as mock_run:
-            mock_run.side_effect = subprocess.TimeoutExpired("cmd", 300)
+            mock_run.side_effect = Exception("timeout")
 
             score = run_eval_on_checkpoint(checkpoint_path, "gsm8k")
 
             assert score == 0.0
-
-
-if __name__ == "__main__":
-    test_run_eval_on_checkpoint()
-    test_run_eval_on_checkpoint_failure()
-    test_run_eval_on_checkpoint_timeout()
-    print("\n✓ All sweep eval integration tests passed")

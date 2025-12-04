@@ -32,12 +32,18 @@ def run_eval_on_checkpoint(checkpoint_path: Path, eval_task: str) -> float:
         f"""import torch
 from foundry.benchmarks.harness import run_benchmark_suite
 from foundry.model import GPT
-from foundry.data.tokenize import CharTokenizer
+from foundry.data.tokenize import BPETokenizer
+from pathlib import Path
 
-checkpoint = torch.load('{checkpoint_path}')
+checkpoint = torch.load('{checkpoint_path}', weights_only=False)
 model = GPT(checkpoint['config'])
 model.load_state_dict(checkpoint['model'])
-tokenizer = CharTokenizer()
+
+meta_path = Path('{checkpoint_path}').parent / 'meta.pkl'
+if meta_path.exists():
+    tokenizer = BPETokenizer.load(meta_path)
+else:
+    tokenizer = BPETokenizer()
 
 results = run_benchmark_suite(model, tokenizer, ['{eval_task}'], max_samples=50)
 if '{eval_task}' in results and 'accuracy' in results['{eval_task}']:

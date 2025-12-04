@@ -1,38 +1,11 @@
 """Tests for preference pair generation."""
 
-import pytest
-
 from foundry.data.preferences import (
     PreferencePair,
     generate_constitution_pairs,
     generate_pairs_from_models,
     generate_pairs_from_samples,
 )
-from foundry.data.tokenize import CharTokenizer
-from foundry.model import GPT, GPTConfig
-
-
-@pytest.fixture
-def tiny_model():
-    """Tiny model for testing."""
-    config = GPTConfig(
-        n_layer=2,
-        n_head=2,
-        n_kv_head=2,
-        n_embd=64,
-        block_size=128,
-        vocab_size=100,
-        dropout=0.0,
-    )
-    model = GPT(config)
-    model.eval()
-    return model
-
-
-@pytest.fixture
-def char_tokenizer():
-    """Simple character tokenizer."""
-    return CharTokenizer()
 
 
 def test_preference_pair_dataclass():
@@ -52,13 +25,13 @@ def test_preference_pair_dataclass():
     assert pair.rejected_score == 0.0
 
 
-def test_generate_pairs_from_samples_structure(tiny_model, char_tokenizer):
+def test_generate_pairs_from_samples_structure(tiny_model, mock_tokenizer):
     """Best-of-N sampling generates preference pairs."""
     prompts = ["test prompt"]
 
     pairs = generate_pairs_from_samples(
         tiny_model,
-        char_tokenizer,
+        mock_tokenizer,
         prompts,
         num_samples_per_prompt=2,
         max_new_tokens=10,
@@ -74,7 +47,7 @@ def test_generate_pairs_from_samples_structure(tiny_model, char_tokenizer):
         assert isinstance(pair.rejected, str)
 
 
-def test_generate_pairs_from_models_structure(tiny_model, char_tokenizer):
+def test_generate_pairs_from_models_structure(tiny_model, mock_tokenizer):
     """Model comparison generates preference pairs."""
     prompts = ["compare these models"]
 
@@ -84,7 +57,7 @@ def test_generate_pairs_from_models_structure(tiny_model, char_tokenizer):
     pairs = generate_pairs_from_models(
         model_a,
         model_b,
-        char_tokenizer,
+        mock_tokenizer,
         prompts,
         prefer_model="a",
     )
@@ -96,14 +69,14 @@ def test_generate_pairs_from_models_structure(tiny_model, char_tokenizer):
         assert isinstance(pair, PreferencePair)
 
 
-def test_generate_constitution_pairs_structure(tiny_model, char_tokenizer):
+def test_generate_constitution_pairs_structure(tiny_model, mock_tokenizer):
     """Constitutional AI generates critique-revision pairs."""
     prompts = ["test"]
     principles = ["Be helpful and harmless"]
 
     pairs = generate_constitution_pairs(
         tiny_model,
-        char_tokenizer,
+        mock_tokenizer,
         prompts,
         principles,
         max_new_tokens=10,
@@ -117,7 +90,7 @@ def test_generate_constitution_pairs_structure(tiny_model, char_tokenizer):
         assert pair.prompt in prompts
 
 
-def test_custom_reward_function(tiny_model, char_tokenizer):
+def test_custom_reward_function(tiny_model, mock_tokenizer):
     """generate_pairs_from_samples accepts custom reward."""
 
     def custom_reward(prompt, response):
@@ -125,7 +98,7 @@ def test_custom_reward_function(tiny_model, char_tokenizer):
 
     pairs = generate_pairs_from_samples(
         tiny_model,
-        char_tokenizer,
+        mock_tokenizer,
         ["test"],
         num_samples_per_prompt=2,
         reward_fn=custom_reward,
