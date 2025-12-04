@@ -68,11 +68,3 @@ def test_dpo_loss_prefers_chosen():
     loss_low = dpo(policy_chosen_low, policy_rejected_high, reference_chosen, reference_rejected)
 
     assert loss_high < loss_low
-
-
-if __name__ == "__main__":
-    test_dpo_loss_basic()
-    test_dpo_loss_with_label_smoothing()
-    test_compute_log_probs()
-    test_dpo_loss_prefers_chosen()
-    print("\n✓ All DPO tests passed")

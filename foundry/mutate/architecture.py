@@ -140,7 +140,7 @@ def mutate_loss(
         cross_entropy: Standard cross entropy (default)
         focal: Focal loss (focuses on hard examples)
         label_smoothing: Cross entropy with label smoothing
-        dpo: Direct Preference Optimization
+        dpo: Direct Preference Optimization (requires preference data)
     """
     config = base_config or load_baseline()
 
@@ -164,8 +164,8 @@ def mutate_dpo(
     """Generate DPO (Direct Preference Optimization) mutation.
 
     Args:
-        beta: Temperature parameter for DPO
-        label_smoothing: Label smoothing for DPO loss
+        beta: DPO temperature parameter (default: 0.1)
+        label_smoothing: Label smoothing for DPO loss (default: 0.0)
     """
     config = base_config or load_baseline()
 

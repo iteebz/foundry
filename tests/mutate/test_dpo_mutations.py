@@ -47,11 +47,3 @@ def test_save_dpo_mutation():
 
         assert loaded["name"] == config["name"]
         assert loaded["model_args"]["loss_type"] == "dpo"
-
-
-if __name__ == "__main__":
-    test_mutate_loss_dpo()
-    test_mutate_dpo_default()
-    test_mutate_dpo_custom()
-    test_save_dpo_mutation()
-    print("\n✓ All DPO mutation tests passed")
