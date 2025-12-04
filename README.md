@@ -9,10 +9,10 @@ Agent-modifiable nanoGPT training infrastructure.
 poetry install
 
 # Train baseline model
-python src/train.py --experiment=experiments/baseline.yaml
+python src/train.py experiments/baseline.yaml
 
-# Compare baseline vs mutation
-python compare.py v1 v2 shakespeare_char --iters=5000
+# Compare baseline vs modern
+python compare.py experiments/baseline.yaml experiments/modern.yaml
 ```
 
 ## Mutation Framework
@@ -20,8 +20,7 @@ python compare.py v1 v2 shakespeare_char --iters=5000
 Experiments are YAML configs that specify model architecture and training parameters:
 
 ```yaml
-name: "baseline_v1"
-base_model: "v1"  # or "v2"
+name: "baseline"
 
 training:
   max_iters: 5000
@@ -31,32 +30,31 @@ training:
 model_args:
   n_layer: 6
   n_head: 6
+  n_kv_head: 2
   n_embd: 384
 ```
 
-Flow: `experiments/*.yaml` → `model_factory.py` → `train.py`
+Flow: `experiments/*.yaml` → `train.py`
+
+Usage: `python src/train.py experiments/baseline.yaml`
 
 ## Architecture
 
 ```
 foundry/
-├── docs/experiments/oplot-foundry.md
 ├── experiments/
-│   ├── baseline.yaml   # v1 config
-│   └── modern.yaml     # v2 config
+│   ├── baseline.yaml
+│   └── modern.yaml
 ├── src/
-│   ├── model.py        # nanoGPT base (330 lines)
-│   ├── model_v2.py     # modern modules integrated
-│   ├── model_factory.py # YAML → model loader
-│   ├── train.py        # nanoGPT training (--experiment flag)
+│   ├── model.py        # GPT (RoPE+GQA+RMSNorm+SwiGLU)
+│   ├── model_factory.py
+│   ├── train.py
 │   └── modules/
-│       ├── rope.py     # RoPE (52 lines)
-│       ├── gqa.py      # GQA (44 lines)
-│       ├── rmsnorm.py  # RMSNorm (20 lines)
-│       └── swiglu.py   # SwiGLU (23 lines)
+│       ├── rope.py
+│       ├── gqa.py
+│       ├── rmsnorm.py
+│       └── swiglu.py
 └── tests/
-    ├── test_modules.py
-    └── test_integration.py  # 6 tests passing
 ```
 
 ### Mutation Surfaces

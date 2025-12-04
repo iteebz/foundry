@@ -1,22 +1,7 @@
-"""
-This training script can be run both on a single gpu in debug mode,
-and also in a larger training run with distributed data parallel (ddp).
-
-To run on a single GPU, example:
-$ python train.py --batch_size=32 --compile=False
-
-To run with DDP on 4 gpus on 1 node, example:
-$ torchrun --standalone --nproc_per_node=4 train.py
-
-To run with DDP on 4 gpus across 2 nodes, example:
-- Run on the first (master) node with example IP 123.456.123.456:
-$ torchrun --nproc_per_node=8 --nnodes=2 --node_rank=0 --master_addr=123.456.123.456 --master_port=1234 train.py
-- Run on the worker node:
-$ torchrun --nproc_per_node=8 --nnodes=2 --node_rank=1 --master_addr=123.456.123.456 --master_port=1234 train.py
-(If your cluster does not have Infiniband interconnect prepend NCCL_IB_DISABLE=1)
-"""
+"""Training script with single GPU and DDP support."""
 
 import os
+import sys
 import time
 import math
 import pickle
@@ -28,11 +13,6 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 
 from eval import evaluate
-
-# model imports - dynamic based on --model flag
-model_module = None
-GPTConfig = None
-GPT = None
 
 # -----------------------------------------------------------------------------
 # default config values designed to train a gpt2 (124M) on OpenWebText
@@ -54,14 +34,13 @@ gradient_accumulation_steps = 5 * 8 # used to simulate larger batch sizes
 batch_size = 12 # if gradient_accumulation_steps > 1, this is the micro-batch size
 block_size = 1024
 # model
-experiment = '' # path to experiment YAML config (overrides model/n_layer/n_head/etc)
-model = 'v1' # 'v1' (nanoGPT baseline) or 'v2' (RoPE+GQA+RMSNorm+SwiGLU)
+experiment = '' # path to experiment YAML config (overrides defaults)
 n_layer = 12
 n_head = 12
-n_kv_head = 4 # only used for v2 (GQA)
+n_kv_head = 4
 n_embd = 768
-dropout = 0.0 # for pretraining 0 is good, for finetuning try 0.1+
-bias = False # do we use bias inside LayerNorm and Linear layers?
+dropout = 0.0
+bias = False
 # adamw optimizer
 learning_rate = 6e-4 # max learning rate
 max_iters = 600000 # total number of training iterations
@@ -69,6 +48,9 @@ weight_decay = 1e-1
 beta1 = 0.9
 beta2 = 0.95
 grad_clip = 1.0 # clip gradients at this value, or disable if == 0.0
+# ema
+use_ema = True # use exponential moving average
+ema_decay = 0.9999 # ema decay rate
 # learning rate decay settings
 decay_lr = True # whether to decay the learning rate
 warmup_iters = 2000 # how many steps to warm up for
@@ -81,9 +63,20 @@ device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is
 dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler
 compile = True # use PyTorch 2.0 to compile the model to be faster
 # -----------------------------------------------------------------------------
+
+if len(sys.argv) > 1:
+    experiment = sys.argv[1]
+
+if experiment:
+    from model_factory import get_training_overrides
+    overrides = get_training_overrides(experiment)
+    for key, val in overrides.items():
+        if key in globals():
+            globals()[key] = val
+    print(f"Loaded config from {experiment}")
+
 config_keys = [k for k,v in globals().items() if not k.startswith('_') and isinstance(v, (int, float, bool, str))]
-exec(open('configurator.py').read()) # overrides from command line or config file
-config = {k: globals()[k] for k in config_keys} # will be useful for logging
+config = {k: globals()[k] for k in config_keys}
 # -----------------------------------------------------------------------------
 
 # various inits, derived attributes, I/O setup
@@ -142,6 +135,22 @@ def get_batch(split):
 iter_num = 0
 best_val_loss = 1e9
 
+class EMA:
+    def __init__(self, model, decay=0.9999):
+        self.decay = decay
+        self.shadow = {k: v.clone().detach() for k, v in model.state_dict().items()}
+    
+    def update(self, model):
+        for k, v in model.state_dict().items():
+            self.shadow[k].mul_(self.decay).add_(v, alpha=1 - self.decay)
+    
+    def apply_shadow(self, model):
+        for k, v in model.named_parameters():
+            if k in self.shadow:
+                v.data.copy_(self.shadow[k])
+
+ema_model = None
+
 # attempt to derive vocab_size from the dataset
 meta_path = os.path.join(data_dir, 'meta.pkl')
 meta_vocab_size = None
@@ -151,29 +160,11 @@ if os.path.exists(meta_path):
     meta_vocab_size = meta['vocab_size']
     print(f"found vocab_size = {meta_vocab_size} (inside {meta_path})")
 
-# dynamic model import
-if experiment:
-    from model_factory import get_model_from_experiment
-    experiment_model, experiment_model_args = get_model_from_experiment(experiment)
-    model = experiment_model
-    for key, val in experiment_model_args.items():
-        globals()[key] = val
-    print(f"Loading model from experiment: {experiment}")
-    print(f"  Model: {model}")
-    print(f"  Args: {experiment_model_args}")
-
-if model == 'v1':
-    from model import GPTConfig, GPT
-elif model == 'v2':
-    from model_v2 import GPTConfig, GPT
-else:
-    raise ValueError(f"unknown model: {model}")
+from model import GPTConfig, GPT
 
 # model init
-model_args = dict(n_layer=n_layer, n_head=n_head, n_embd=n_embd, block_size=block_size,
-                  bias=bias, vocab_size=None, dropout=dropout)
-if model == 'v2':
-    model_args['n_kv_head'] = n_kv_head
+model_args = dict(n_layer=n_layer, n_head=n_head, n_kv_head=n_kv_head, n_embd=n_embd, 
+                  block_size=block_size, bias=bias, vocab_size=None, dropout=dropout)
 if init_from == 'scratch':
     # init a new model from scratch
     print("Initializing a new model from scratch")
@@ -207,6 +198,11 @@ elif init_from == 'resume':
     iter_num = checkpoint['iter_num']
     best_val_loss = checkpoint['best_val_loss']
 model.to(device)
+
+# initialize EMA if enabled
+if use_ema:
+    ema_model = EMA(model, decay=ema_decay)
+    print(f"initialized EMA with decay={ema_decay}")
 
 # initialize a GradScaler. If enabled=False scaler is a no-op
 scaler = torch.cuda.amp.GradScaler(enabled=(dtype == 'float16'))
@@ -296,6 +292,8 @@ while True:
                     'best_val_loss': best_val_loss,
                     'config': config,
                 }
+                if use_ema and ema_model is not None:
+                    checkpoint['ema'] = ema_model.shadow
                 print(f"saving checkpoint to {out_dir}")
                 torch.save(checkpoint, os.path.join(out_dir, 'ckpt.pt'))
     if iter_num == 0 and eval_only:
@@ -326,6 +324,10 @@ while True:
     scaler.update()
     # flush the gradients as soon as we can, no need for this memory anymore
     optimizer.zero_grad(set_to_none=True)
+    
+    # update EMA
+    if use_ema and ema_model is not None:
+        ema_model.update(raw_model)
 
     # timing and logging
     t1 = time.time()

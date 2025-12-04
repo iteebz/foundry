@@ -1,5 +1,4 @@
-name: "baseline_v1"
-base_model: "v1"
+name: "baseline"
 
 training:
   max_iters: 5000

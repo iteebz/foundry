@@ -4,16 +4,14 @@
 test:
     pytest tests/
 
-# Quick validation run (both models, 100 iters) - requires CUDA
+# Quick validation run - requires CUDA
 train-smoke:
-    @echo "==> Smoke test: v1 baseline"
-    python src/train.py --model=v1 --dataset=shakespeare_char --max_iters=100 --out_dir=out/smoke_v1 --compile=False --always_save_checkpoint=False --eval_interval=100
-    @echo "==> Smoke test: v2 modern"
-    python src/train.py --model=v2 --dataset=shakespeare_char --max_iters=100 --out_dir=out/smoke_v2 --compile=False --always_save_checkpoint=False --eval_interval=100
+    @echo "==> Smoke test: baseline"
+    python src/train.py experiments/baseline.yaml
 
-# Baseline vs v2 full comparison run - requires CUDA
+# Baseline vs modern full comparison run - requires CUDA
 compare:
-    python compare.py --baseline=v1 --mutation=v2 --dataset=shakespeare_char --iters=5000
+    python compare.py experiments/baseline.yaml experiments/modern.yaml
 
 # CI: test only (train-smoke requires GPU)
 ci: test

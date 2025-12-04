@@ -3,7 +3,7 @@ import torch
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
 
-from model_v2 import GPT, GPTConfig
+from model import GPT, GPTConfig
 
 def test_forward_pass():
     config = GPTConfig(

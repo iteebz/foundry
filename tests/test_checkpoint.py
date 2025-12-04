@@ -15,6 +15,7 @@ def test_save_load_checkpoint():
         vocab_size=1024,
         n_layer=2,
         n_head=4,
+        n_kv_head=2,
         n_embd=64,
         dropout=0.0,
         bias=False
@@ -23,7 +24,7 @@ def test_save_load_checkpoint():
     model = GPT(config)
     optimizer = model.configure_optimizers(0.01, 1e-4, (0.9, 0.95), 'cpu')
     
-    original_weight = model.wte.weight.clone()
+    original_weight = model.transformer.wte.weight.clone()
     
     with tempfile.NamedTemporaryFile(suffix='.pt', delete=False) as f:
         temp_path = f.name
@@ -31,12 +32,12 @@ def test_save_load_checkpoint():
     try:
         save_checkpoint(model, optimizer, {'test': 'config'}, temp_path)
         
-        model.wte.weight.data.zero_()
-        assert not torch.allclose(model.wte.weight, original_weight)
+        model.transformer.wte.weight.data.zero_()
+        assert not torch.allclose(model.transformer.wte.weight, original_weight)
         
         loaded_config = load_checkpoint(model, optimizer, temp_path)
         
-        assert torch.allclose(model.wte.weight, original_weight)
+        assert torch.allclose(model.transformer.wte.weight, original_weight)
         assert loaded_config['test'] == 'config'
         print("✓ Checkpoint save/load")
     finally:
@@ -50,6 +51,7 @@ def test_load_checkpoint_no_optimizer():
         vocab_size=1024,
         n_layer=2,
         n_head=4,
+        n_kv_head=2,
         n_embd=64,
         dropout=0.0,
         bias=False

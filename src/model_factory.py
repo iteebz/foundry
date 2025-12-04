@@ -15,18 +15,27 @@ def load_experiment_config(experiment_file: str) -> dict:
     return config
 
 
-def get_model_from_experiment(experiment_file: str) -> tuple[str, dict]:
-    """Extract model version and args from experiment config.
-    
-    Returns:
-        tuple: (model_version, model_args) where model_version is 'v1' or 'v2'
-    """
+def get_model_from_experiment(experiment_file: str) -> dict:
+    """Extract model args from experiment config."""
     config = load_experiment_config(experiment_file)
-    
-    base_model = config.get("base_model", "v1")
-    if base_model not in ["v1", "v2"]:
-        raise ValueError(f"Invalid base_model: {base_model}. Must be 'v1' or 'v2'")
-    
+    return config.get("model_args", {})
+
+
+def get_training_overrides(experiment_file: str) -> dict:
+    """Extract training parameter overrides from experiment config."""
+    config = load_experiment_config(experiment_file)
+    training_config = config.get("training", {})
     model_args = config.get("model_args", {})
     
-    return base_model, model_args
+    overrides = {}
+    overrides.update(training_config)
+    overrides.update(model_args)
+    
+    for key, val in overrides.items():
+        if isinstance(val, str):
+            try:
+                overrides[key] = float(val)
+            except ValueError:
+                pass
+    
+    return overrides
