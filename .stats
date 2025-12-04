@@ -1,12 +1,12 @@
-FOUNDRY v1.0 - REFERENCE GRADE ML TRAINING INFRASTRUCTURE
+FOUNDRY v1.1 - REFERENCE GRADE ML TRAINING INFRASTRUCTURE
 
-Lines of Code: 1586
-Modules: 12
-Test Files: 14
-Tests: 59 (100% passing)
-Commits: 32
+Lines of Code: 2042
+Modules: 13
+Test Files: 16
+Tests: 71 (100% passing)
+Commits: 40
 
-Mutation Types: 14
+Mutation Types: 17
 - Attention (GQA, MHA)
 - Architecture (depth, width)
 - Normalization (RMSNorm, LayerNorm, QKNorm)
@@ -16,15 +16,24 @@ Mutation Types: 14
 - Training (LR, batch_size, warmup, grad_clip)
 - Optimizer (weight_decay, adam_betas)
 - Data (filtering, dedupe)
+- LoRA (rank, alpha, dropout)
 
 Core Files:
-- src/train.py: 293 LOC
+- src/train.py: 318 LOC
 - src/model.py: 235 LOC
-- src/mutate.py: 391 LOC
+- src/mutate.py: 443 LOC
+- src/lora.py: 133 LOC (NEW)
 - sweep.py: 161 LOC
 - compare.py: 109 LOC
 
+Features:
+- Full training (from scratch)
+- LoRA finetuning (adapter-based)
+- Autonomous iteration (sweep + promote)
+- Parallel training (ProcessPoolExecutor)
+
 RSI Loop: OPERATIONAL
 Autonomous Iteration: ENABLED
+LoRA Finetuning: ENABLED
 
 Zero ceremony. Agent-parseable. Zealot-grade.

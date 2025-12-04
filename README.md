@@ -112,6 +112,24 @@ python sweep.py lr 3e-4 6e-4 1e-3 --promote
 
 Each `--promote` replaces baseline with the winning mutation. The loop self-improves without human intervention.
 
+## LoRA Finetuning
+
+Low-rank adaptation for efficient finetuning:
+
+```bash
+# Generate LoRA config
+python -m src.mutate lora_rank 16
+
+# Train with LoRA (freezes base, trains adapters)
+python src/train.py experiments/lora_r16.yaml
+
+# Sweep LoRA hyperparameters
+python sweep.py lora_rank 4 8 16 32 64 --promote
+python sweep.py lora_alpha 8 16 32 64 --promote
+```
+
+LoRA reduces trainable params by 90-99%, enabling finetuning on limited hardware.
+
 ### Mutation Surfaces
 
 **Implemented:**
@@ -122,9 +140,11 @@ Each `--promote` replaces baseline with the winning mutation. The loop self-impr
 5. **Position Encoding** - RoPE, ALiBi
 6. **Loss** - CrossEntropy, Focal, LabelSmoothing
 7. **Training** - LR, batch size, warmup, grad clip
-8. **Data** - Filtering, dedupe
+8. **Optimizer** - Weight decay, Adam betas
+9. **Data** - Filtering, dedupe
+10. **LoRA** - Rank, alpha, dropout (finetuning)
 
 **Future:**
 - Advanced attention (MLA, sliding window, sparse)
-- Optimizer variants (AdamW, Lion, Sophia)
+- Model zoo (load pretrained llama/mistral)
 - Curriculum learning

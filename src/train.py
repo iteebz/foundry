@@ -51,6 +51,10 @@ backend = 'nccl'
 device = 'cuda' if torch.cuda.is_available() else 'mps' if torch.backends.mps.is_available() else 'cpu'
 dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16'
 compile = True
+lora_enabled = False
+lora_r = 8
+lora_alpha = 16
+lora_dropout = 0.0
 
 if len(sys.argv) > 1:
     experiment = sys.argv[1]
@@ -61,6 +65,15 @@ if experiment:
     for key, val in overrides.items():
         if key in globals():
             globals()[key] = val
+    
+    if 'lora' in overrides and isinstance(overrides['lora'], dict):
+        lora_config = overrides['lora']
+        if lora_config.get('enabled', False):
+            globals()['lora_enabled'] = True
+            globals()['lora_r'] = lora_config.get('r', 8)
+            globals()['lora_alpha'] = lora_config.get('lora_alpha', 16)
+            globals()['lora_dropout'] = lora_config.get('lora_dropout', 0.0)
+    
     print(f"Loaded config from {experiment}")
 
 config_keys = [k for k,v in globals().items() if not k.startswith('_') and isinstance(v, (int, float, bool, str))]
@@ -165,6 +178,18 @@ elif init_from == 'resume':
     iter_num = checkpoint['iter_num']
     best_val_loss = checkpoint['best_val_loss']
 model.to(device)
+
+lora_enabled = globals().get('lora_enabled', False)
+lora_r = globals().get('lora_r', 8)
+lora_alpha = globals().get('lora_alpha', 16)
+lora_dropout = globals().get('lora_dropout', 0.0)
+
+if lora_enabled:
+    from lora import apply_lora_to_model, get_lora_params
+    model = apply_lora_to_model(model, r=lora_r, lora_alpha=lora_alpha, lora_dropout=lora_dropout)
+    stats = get_lora_params(model)
+    print(f"LoRA enabled: r={lora_r}, alpha={lora_alpha}, dropout={lora_dropout}")
+    print(f"Trainable params: {stats['trainable_params']:,} ({stats['trainable_pct']:.2f}%)")
 
 if use_ema:
     ema_model = EMA(model, decay=ema_decay)

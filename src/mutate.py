@@ -278,6 +278,48 @@ def mutate_adam_betas(
     return config
 
 
+def mutate_lora_rank(
+    r: int,
+    base_config: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Generate LoRA rank mutations."""
+    config = base_config or load_baseline()
+    config["name"] = f"lora_r{r}"
+    if "lora" not in config:
+        config["lora"] = {}
+    config["lora"]["r"] = r
+    config["lora"]["enabled"] = True
+    return config
+
+
+def mutate_lora_alpha(
+    lora_alpha: int,
+    base_config: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Generate LoRA alpha mutations."""
+    config = base_config or load_baseline()
+    config["name"] = f"lora_alpha{lora_alpha}"
+    if "lora" not in config:
+        config["lora"] = {}
+    config["lora"]["lora_alpha"] = lora_alpha
+    config["lora"]["enabled"] = True
+    return config
+
+
+def mutate_lora_dropout(
+    lora_dropout: float,
+    base_config: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Generate LoRA dropout mutations."""
+    config = base_config or load_baseline()
+    config["name"] = f"lora_dropout{lora_dropout}"
+    if "lora" not in config:
+        config["lora"] = {}
+    config["lora"]["lora_dropout"] = lora_dropout
+    config["lora"]["enabled"] = True
+    return config
+
+
 def save_mutation(config: Dict[str, Any], output_dir: str = "experiments") -> Path:
     """Save mutation config to YAML."""
     output_path = Path(output_dir) / f"{config['name']}.yaml"
@@ -319,6 +361,9 @@ def generate_sweep(
         "data_filter": mutate_data_filter,
         "weight_decay": mutate_weight_decay,
         "adam_betas": mutate_adam_betas,
+        "lora_rank": mutate_lora_rank,
+        "lora_alpha": mutate_lora_alpha,
+        "lora_dropout": mutate_lora_dropout,
     }
     
     if mutation_type not in mutation_funcs:
@@ -342,13 +387,14 @@ if __name__ == "__main__":
     if len(sys.argv) < 3:
         print("Usage: python -m src.mutate <type> <variant>")
         print("Types: attention, depth, width, lr, norm, activation, position, loss,")
-        print("       batch_size, warmup, grad_clip, weight_decay, adam_betas")
+        print("       batch_size, warmup, grad_clip, weight_decay, adam_betas,")
+        print("       lora_rank, lora_alpha, lora_dropout")
         print("\nExamples:")
         print("  python -m src.mutate attention gqa_2kv")
         print("  python -m src.mutate depth 8")
         print("  python -m src.mutate lr 3e-4")
-        print("  python -m src.mutate weight_decay 1e-2")
-        print("  python -m src.mutate adam_betas 0.9 0.999")
+        print("  python -m src.mutate lora_rank 16")
+        print("  python -m src.mutate lora_alpha 32")
         sys.exit(1)
     
     mutation_type = sys.argv[1]
@@ -382,6 +428,12 @@ if __name__ == "__main__":
             print("adam_betas requires two arguments: beta1 beta2")
             sys.exit(1)
         config = mutate_adam_betas(float(sys.argv[2]), float(sys.argv[3]))
+    elif mutation_type == "lora_rank":
+        config = mutate_lora_rank(int(sys.argv[2]))
+    elif mutation_type == "lora_alpha":
+        config = mutate_lora_alpha(int(sys.argv[2]))
+    elif mutation_type == "lora_dropout":
+        config = mutate_lora_dropout(float(sys.argv[2]))
     else:
         print(f"Unknown mutation type: {mutation_type}")
         sys.exit(1)
