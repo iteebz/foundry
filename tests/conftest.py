@@ -1,13 +1,16 @@
 """Pytest configuration for all tests."""
 
 import sys
+import tempfile
 from pathlib import Path
+
+import numpy as np
+import pytest
+import torch
 
 repo_root = Path(__file__).resolve().parent.parent
 if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
-
-import pytest  # noqa: E402
 
 from foundry.model import GPT, GPTConfig  # noqa: E402
 
@@ -46,3 +49,22 @@ def tiny_model():
 def mock_tokenizer():
     """Mock tokenizer."""
     return MockTokenizer()
+
+
+@pytest.fixture
+def token_bin_file():
+    """10-token uint16 binary file."""
+    with tempfile.NamedTemporaryFile(suffix=".bin", delete=False) as f:
+        data = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], dtype=np.uint16)
+        data.tofile(f)
+        path = Path(f.name)
+    yield path
+    path.unlink()
+
+
+@pytest.fixture
+def small_datasets():
+    """Two small TensorDatasets for mixture testing."""
+    ds1 = torch.utils.data.TensorDataset(torch.tensor([[1, 2], [3, 4]]))
+    ds2 = torch.utils.data.TensorDataset(torch.tensor([[5, 6]]))
+    return [ds1, ds2]

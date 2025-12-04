@@ -72,23 +72,12 @@ def save_checkpoint(model, optimizer, config: dict, path: str) -> None:
 
 
 def validate_checkpoint(checkpoint: dict) -> None:
-    """Validate checkpoint structure and integrity.
+    """Validate checkpoint integrity.
 
     Raises:
-        ValueError: If checkpoint is corrupted or missing required fields
+        ValueError: If checkpoint is corrupted
     """
-    required_keys = {"model", "config"}
-    missing = required_keys - checkpoint.keys()
-    if missing:
-        raise ValueError(f"Corrupt checkpoint: missing required keys {missing}")
-
-    if not isinstance(checkpoint["model"], dict):
-        raise ValueError("Checkpoint 'model' must be a state dict")
-
-    if not isinstance(checkpoint["config"], dict):
-        raise ValueError("Checkpoint 'config' must be a dict")
-
-    if len(checkpoint["model"]) == 0:
+    if len(checkpoint.get("model", {})) == 0:
         raise ValueError("Checkpoint has empty model state dict")
 
 

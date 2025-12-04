@@ -53,7 +53,7 @@ def pack_sequences(
         else:
             if current_pack:
                 current_pack.extend([pad_token] * (max_length - current_length))
-                packed.append(current_pack)
+                packed.append(list(current_pack))
 
             current_pack = seq_with_eos[:]
             current_length = len(seq_with_eos)
@@ -64,37 +64,47 @@ def pack_sequences(
 
     if current_pack:
         current_pack.extend([pad_token] * (max_length - current_length))
-        packed.append(current_pack)
+        packed.append(list(current_pack))
 
     return packed
 
 
-def compute_packing_efficiency(sequences: list[list[int]], max_length: int) -> dict:
+def compute_packing_efficiency(
+    sequences: list[list[int]] | None = None,
+    max_length: int | None = None,
+    packed_sequences: list[list[int]] | None = None,
+) -> dict:
     """Compute packing efficiency metrics.
 
     Args:
-        sequences: List of variable-length sequences
+        sequences: List of variable-length sequences (will be packed if packed_sequences not provided)
         max_length: Maximum sequence length
+        packed_sequences: Pre-packed sequences (if provided, skips packing step)
 
     Returns:
         Dictionary with efficiency metrics
     """
-    if not sequences:
-        return {"efficiency": 0.0, "waste": 0.0, "num_packed": 0}
+    if packed_sequences is not None:
+        if not packed_sequences:
+            return {"efficiency": 0.0, "waste": 0.0, "num_packed": 0}
+        packed = packed_sequences
+        total_tokens = sum(len(seq) for seq in packed)
+        total_capacity = len(packed) * len(packed[0])
+    else:
+        if not sequences or max_length is None:
+            return {"efficiency": 0.0, "waste": 0.0, "num_packed": 0}
+        packed = pack_sequences(sequences, max_length)
+        total_tokens = sum(len(seq) for seq in sequences)
+        total_capacity = len(packed) * max_length
 
-    packed = pack_sequences(sequences, max_length)
-
-    total_tokens = sum(len(seq) for seq in sequences)
-    total_capacity = len(packed) * max_length
     padding_tokens = total_capacity - total_tokens
-
     efficiency = total_tokens / total_capacity if total_capacity > 0 else 0.0
     waste = padding_tokens / total_capacity if total_capacity > 0 else 0.0
 
     return {
         "efficiency": efficiency,
         "waste": waste,
-        "num_sequences": len(sequences),
+        "num_sequences": len(sequences) if sequences else None,
         "num_packed": len(packed),
         "total_tokens": total_tokens,
         "total_capacity": total_capacity,

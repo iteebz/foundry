@@ -11,28 +11,32 @@ def score_by_length(tokens: list[int]) -> float:
 
 
 def score_by_perplexity(tokens: list[int], model, device: str = "cpu") -> float:
-    """Score difficulty by model perplexity (higher = harder)."""
     if len(tokens) == 0:
         return 0.0
+
+    if len(tokens) < 2:
+        raise ValueError(f"Sequence too short for perplexity: {len(tokens)} tokens")
 
     model.eval()
     inputs = torch.tensor([tokens], device=device)
 
     with torch.no_grad():
         try:
-            logits, loss = model(inputs, inputs)
-            return loss.item()
-        except Exception:
-            return 0.0
+            output = model(inputs, inputs)
+            if not isinstance(output, tuple) or len(output) < 2:
+                raise ValueError(f"Model must return (logits, loss), got {type(output)}")
+            logits, loss = output
+            return float(loss.item())
+        except Exception as e:
+            raise ValueError(f"Model evaluation failed: {e}") from e
 
 
 def order_by_difficulty(
     dataset: list[list[int]], score_fn: Callable[[list[int]], float], reverse: bool = False
-) -> list[list[int]]:
-    """Order dataset by difficulty score."""
+) -> tuple[list[list[int]], list[float]]:
     scored = [(item, score_fn(item)) for item in dataset]
     scored.sort(key=lambda x: x[1], reverse=reverse)
-    return [item for item, _ in scored]
+    return [item for item, _ in scored], [score for _, score in scored]
 
 
 def curriculum_schedule(
@@ -52,7 +56,7 @@ def curriculum_schedule(
     Returns:
         List of dataset stages (each stage is a list of sequences)
     """
-    ordered = order_by_difficulty(dataset, score_fn, reverse=False)
+    ordered, _ = order_by_difficulty(dataset, score_fn, reverse=False)
     stage_size = len(ordered) // num_stages
 
     stages = []

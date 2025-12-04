@@ -1,4 +1,4 @@
-name: "baseline"
+name: "sparse_attention"
 
 training:
   max_iters: 5000
@@ -22,3 +22,5 @@ model_args:
   activation: "swiglu"
   position_encoding: "rope"
   attention_type: "gqa"
+  sparse_block_size: 64
+  sparse_stride: 64

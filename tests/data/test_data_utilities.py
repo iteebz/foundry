@@ -3,7 +3,6 @@
 import tempfile
 from pathlib import Path
 
-import numpy as np
 import pytest
 
 from foundry.data.filter import dedupe, length_filter

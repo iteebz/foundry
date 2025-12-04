@@ -102,12 +102,6 @@ class RunConfig:
         lora_config = LoRAConfig(**lora_args)
 
         wandb_args = raw.get("wandb", {})
-        if "wandb_log" in training_args:
-            wandb_args.setdefault("enabled", training_args["wandb_log"])
-        if "wandb_project" in training_args:
-            wandb_args.setdefault("project", training_args["wandb_project"])
-        if "wandb_run_name" in training_args:
-            wandb_args.setdefault("run_name", training_args["wandb_run_name"])
         wandb_config = WandbConfig(**wandb_args)
 
         metadata = raw.get("_metadata", {})

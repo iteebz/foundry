@@ -71,9 +71,7 @@ def test_moe_gradient_flow_to_selected_experts():
     torch.manual_seed(42)
     x = torch.randn(2, 4, 64, requires_grad=True)
 
-    {
-        name: param.clone() for name, param in moe.named_parameters() if "experts" in name
-    }
+    {name: param.clone() for name, param in moe.named_parameters() if "experts" in name}
 
     output = moe(x)
     loss = output.sum()
@@ -83,10 +81,13 @@ def test_moe_gradient_flow_to_selected_experts():
     for expert_id in range(4):
         expert_updated = False
         for name, param in moe.named_parameters():
-            if f"experts.{expert_id}" in name and param.grad is not None:
-                if not torch.allclose(param.grad, torch.zeros_like(param.grad)):
-                    expert_updated = True
-                    break
+            if (
+                f"experts.{expert_id}" in name
+                and param.grad is not None
+                and not torch.allclose(param.grad, torch.zeros_like(param.grad))
+            ):
+                expert_updated = True
+                break
         if expert_updated:
             updated_experts.append(expert_id)
 

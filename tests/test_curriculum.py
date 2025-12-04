@@ -46,11 +46,13 @@ def test_order_by_difficulty():
     """Order dataset by difficulty."""
     dataset = [[1, 2], [1, 2, 3, 4, 5], [1, 2, 3]]
 
-    ordered = order_by_difficulty(dataset, score_by_length)
+    ordered, scores = order_by_difficulty(dataset, score_by_length)
 
     assert len(ordered[0]) == 2
     assert len(ordered[1]) == 3
     assert len(ordered[2]) == 5
+    assert len(scores) == 3
+    assert scores[0] <= scores[1] <= scores[2]
 
 
 def test_curriculum_schedule_linear():

@@ -1,4 +1,4 @@
-name: "baseline"
+name: "moe"
 
 training:
   max_iters: 5000
@@ -22,3 +22,6 @@ model_args:
   activation: "swiglu"
   position_encoding: "rope"
   attention_type: "gqa"
+  mlp_type: "moe"
+  moe_n_experts: 8
+  moe_top_k: 2

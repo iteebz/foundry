@@ -62,9 +62,10 @@ def train(config_path: str | Path):
 
     master_process, rank, world_size = init_distributed(backend="nccl")
 
+    effective_grad_accum = config.training.gradient_accumulation_steps
     if world_size > 1:
-        assert config.training.gradient_accumulation_steps % world_size == 0
-        config.training.gradient_accumulation_steps //= world_size
+        assert effective_grad_accum % world_size == 0
+        effective_grad_accum //= world_size
 
     if master_process:
         os.makedirs(config.training.out_dir, exist_ok=True)
@@ -159,20 +160,31 @@ def train(config_path: str | Path):
     raw_model = model.module if (is_ddp or is_fsdp) else model
 
     if config.data.sources:
+
+        def get_train_path(src_path: str) -> str:
+            """Infer train split path. Handles: foo.bin -> foo_train.bin, foo_val.bin -> foo_train.bin, foo_train.bin -> foo_train.bin"""
+            p = Path(src_path)
+            if p.stem.endswith("_train"):
+                return src_path
+            if p.stem.endswith("_val"):
+                return str(p.parent / f"{p.stem.replace('_val', '_train')}{p.suffix}")
+            return str(p.parent / f"{p.stem}_train{p.suffix}")
+
+        def get_val_path(src_path: str) -> str:
+            """Infer val split path. Handles: foo.bin -> foo_val.bin, foo_train.bin -> foo_val.bin, foo_val.bin -> foo_val.bin"""
+            p = Path(src_path)
+            if p.stem.endswith("_val"):
+                return src_path
+            if p.stem.endswith("_train"):
+                return str(p.parent / f"{p.stem.replace('_train', '_val')}{p.suffix}")
+            return str(p.parent / f"{p.stem}_val{p.suffix}")
+
         train_datasets = [
-            TokenDataset(
-                src.path.replace(".bin", "_train.bin") if "train" not in src.path else src.path,
-                block_size=config.data.block_size,
-            )
+            TokenDataset(get_train_path(src.path), block_size=config.data.block_size)
             for src in config.data.sources
         ]
         val_datasets = [
-            TokenDataset(
-                src.path.replace(".bin", "_val.bin")
-                if "val" not in src.path
-                else src.path.replace("train", "val"),
-                block_size=config.data.block_size,
-            )
+            TokenDataset(get_val_path(src.path), block_size=config.data.block_size)
             for src in config.data.sources
         ]
         weights = [src.weight for src in config.data.sources]
@@ -236,10 +248,7 @@ def train(config_path: str | Path):
     t0 = time.time()
 
     tokens_per_iter = (
-        config.training.gradient_accumulation_steps
-        * world_size
-        * config.data.batch_size
-        * config.data.block_size
+        effective_grad_accum * world_size * config.data.batch_size * config.data.block_size
     )
     if master_process:
         print(f"Tokens per iteration: {tokens_per_iter:,}")
@@ -269,8 +278,8 @@ def train(config_path: str | Path):
                 metric_logger.log(
                     {
                         "iter": iter_num,
-                        "train_loss": losses["train"].item(),
-                        "val_loss": losses["val"].item(),
+                        "train_loss": float(losses["train"]),
+                        "val_loss": float(losses["val"]),
                         "lr": lr,
                     }
                 )
@@ -306,17 +315,15 @@ def train(config_path: str | Path):
         if iter_num == 0 and config.training.eval_only:
             break
 
-        for micro_step in range(config.training.gradient_accumulation_steps):
+        for micro_step in range(effective_grad_accum):
             if is_ddp:
-                model.require_backward_grad_sync = (
-                    micro_step == config.training.gradient_accumulation_steps - 1
-                )
+                model.require_backward_grad_sync = micro_step == effective_grad_accum - 1
             with ctx:
                 logits, loss = model(X, Y)
-                loss = loss / config.training.gradient_accumulation_steps
+                loss = loss / effective_grad_accum
             scaler.scale(loss).backward()
 
-            if micro_step < config.training.gradient_accumulation_steps - 1:
+            if micro_step < effective_grad_accum - 1:
                 try:
                     X, Y = next(train_iter)
                 except StopIteration:

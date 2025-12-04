@@ -60,7 +60,7 @@ class BPETokenizer:
 
         while len(tokens) >= 2:
             stats = self._get_stats(tokens)
-            pair = min(stats, key=lambda p: self.merges.get(p, float("inf")))
+            pair = max(stats, key=lambda p: self.merges.get(p, float("-inf")))
             if pair not in self.merges:
                 break
             tokens = self._merge(tokens, pair, self.merges[pair])
@@ -69,6 +69,13 @@ class BPETokenizer:
 
     def decode(self, ids: list[int]) -> str:
         """Decode token ids to text."""
+        missing = [i for i in ids if i not in self.vocab]
+        if missing:
+            import warnings
+
+            warnings.warn(
+                f"Skipping {len(set(missing))} unknown tokens: {set(missing)}", stacklevel=2
+            )
         tokens = b"".join(self.vocab[i] for i in ids if i in self.vocab)
         return tokens.decode("utf-8", errors="replace")
 
