@@ -140,10 +140,11 @@ def mutate_loss(
         cross_entropy: Standard cross entropy (default)
         focal: Focal loss (focuses on hard examples)
         label_smoothing: Cross entropy with label smoothing
+        dpo: Direct Preference Optimization
     """
     config = base_config or load_baseline()
 
-    variants = ["cross_entropy", "focal", "label_smoothing"]
+    variants = ["cross_entropy", "focal", "label_smoothing", "dpo"]
     if loss_type not in variants:
         raise ValueError(f"Unknown loss type: {loss_type}. Choose from {variants}")
 
@@ -151,6 +152,32 @@ def mutate_loss(
     if "model_args" not in config:
         config["model_args"] = {}
     config["model_args"]["loss_type"] = loss_type
+
+    return config
+
+
+def mutate_dpo(
+    beta: float = 0.1,
+    label_smoothing: float = 0.0,
+    base_config: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Generate DPO (Direct Preference Optimization) mutation.
+    
+    Args:
+        beta: Temperature parameter for DPO
+        label_smoothing: Label smoothing for DPO loss
+    """
+    config = base_config or load_baseline()
+
+    config["name"] = f"dpo_beta{beta}"
+    if label_smoothing > 0:
+        config["name"] += f"_smooth{label_smoothing}"
+
+    if "model_args" not in config:
+        config["model_args"] = {}
+    config["model_args"]["loss_type"] = "dpo"
+    config["model_args"]["dpo_beta"] = beta
+    config["model_args"]["dpo_label_smoothing"] = label_smoothing
 
     return config
 
