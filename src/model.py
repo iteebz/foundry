@@ -10,6 +10,8 @@ from modules.rmsnorm import RMSNorm
 from modules.layernorm import LayerNorm
 from modules.rope import RotaryEmbedding, apply_rotary_emb
 from modules.swiglu import SwiGLU
+from modules.gelu import GELU
+from modules.glu import GLU
 from modules.gqa import GroupedQueryAttention
 
 class CausalSelfAttentionRoPE(nn.Module):
@@ -63,7 +65,14 @@ class Block(nn.Module):
         self.ln_1 = norm_cls(config.n_embd, bias=config.bias) if config.norm_type == 'layernorm' else norm_cls(config.n_embd)
         self.attn = CausalSelfAttentionRoPE(config)
         self.ln_2 = norm_cls(config.n_embd, bias=config.bias) if config.norm_type == 'layernorm' else norm_cls(config.n_embd)
-        self.mlp = SwiGLU(config.n_embd, bias=config.bias)
+        
+        activation_map = {
+            'swiglu': SwiGLU,
+            'gelu': GELU,
+            'glu': GLU,
+        }
+        act_cls = activation_map.get(config.activation, SwiGLU)
+        self.mlp = act_cls(config.n_embd, bias=config.bias)
 
     def forward(self, x):
         x = x + self.attn(self.ln_1(x))
@@ -81,6 +90,7 @@ class GPTConfig:
     dropout: float = 0.0
     bias: bool = False
     norm_type: str = 'rmsnorm'
+    activation: str = 'swiglu'
 
 class GPT(nn.Module):
     def __init__(self, config):

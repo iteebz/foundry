@@ -113,6 +113,31 @@ def mutate_norm(
     return config
 
 
+def mutate_activation(
+    activation: str = "gelu",
+    base_config: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Generate activation function mutations.
+    
+    Variants:
+        swiglu: SwiGLU (default, gated variant)
+        gelu: Standard GELU
+        glu: Gated Linear Unit
+    """
+    config = base_config or load_baseline()
+    
+    variants = ["swiglu", "gelu", "glu"]
+    if activation not in variants:
+        raise ValueError(f"Unknown activation: {activation}. Choose from {variants}")
+    
+    config["name"] = f"act_{activation}"
+    if "model_args" not in config:
+        config["model_args"] = {}
+    config["model_args"]["activation"] = activation
+    
+    return config
+
+
 def save_mutation(config: Dict[str, Any], output_dir: str = "experiments") -> Path:
     """Save mutation config to YAML."""
     output_path = Path(output_dir) / f"{config['name']}.yaml"
@@ -145,6 +170,7 @@ def generate_sweep(
         "width": mutate_width,
         "lr": mutate_lr,
         "norm": mutate_norm,
+        "activation": mutate_activation,
     }
     
     if mutation_type not in mutation_funcs:
@@ -167,13 +193,14 @@ if __name__ == "__main__":
     
     if len(sys.argv) < 3:
         print("Usage: python -m src.mutate <type> <variant>")
-        print("Types: attention, depth, width, lr, norm")
+        print("Types: attention, depth, width, lr, norm, activation")
         print("\nExamples:")
         print("  python -m src.mutate attention gqa_2kv")
         print("  python -m src.mutate depth 8")
         print("  python -m src.mutate width 512")
         print("  python -m src.mutate lr 3e-4")
         print("  python -m src.mutate norm layernorm")
+        print("  python -m src.mutate activation gelu")
         sys.exit(1)
     
     mutation_type = sys.argv[1]
@@ -189,6 +216,8 @@ if __name__ == "__main__":
         config = mutate_lr(float(sys.argv[2]))
     elif mutation_type == "norm":
         config = mutate_norm(sys.argv[2])
+    elif mutation_type == "activation":
+        config = mutate_activation(sys.argv[2])
     else:
         print(f"Unknown mutation type: {mutation_type}")
         sys.exit(1)
