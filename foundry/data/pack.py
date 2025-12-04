@@ -20,16 +20,16 @@ def pack_sequences(
     pad_token: int = 0,
 ) -> list[list[int]]:
     """Pack variable-length sequences to minimize padding (greedy bin-packing).
-    
+
     Args:
         sequences: List of variable-length token sequences
         max_length: Maximum sequence length (block_size)
         eos_token: Token to separate packed sequences
         pad_token: Token for padding
-    
+
     Returns:
         List of packed sequences, each of length max_length
-    
+
     Example:
         >>> seqs = [[1,2,3], [4,5], [6,7,8,9]]
         >>> packed = pack_sequences(seqs, max_length=10, eos_token=0)
@@ -71,11 +71,11 @@ def pack_sequences(
 
 def compute_packing_efficiency(sequences: list[list[int]], max_length: int) -> dict:
     """Compute packing efficiency metrics.
-    
+
     Args:
         sequences: List of variable-length sequences
         max_length: Maximum sequence length
-    
+
     Returns:
         Dictionary with efficiency metrics
     """

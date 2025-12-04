@@ -112,9 +112,9 @@ class MixtureDataset(Dataset):
         """Build deterministic sample schedule balancing dataset weights."""
         rng = np.random.RandomState(self.seed)
 
-        total_samples = sum(len(ds) for ds in self.datasets)
+        sum(len(ds) for ds in self.datasets)
         samples_per_dataset = [
-            max(1, int(len(ds) * w)) for ds, w in zip(self.datasets, self.weights)
+            max(1, int(len(ds) * w)) for ds, w in zip(self.datasets, self.weights, strict=False)
         ]
 
         indices = []

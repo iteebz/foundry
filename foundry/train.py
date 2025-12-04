@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 
 from foundry.config import RunConfig
-from foundry.data.dataset import TokenDataset
+from foundry.data.dataset import MixtureDataset, TokenDataset
 from foundry.distributed import (
     cleanup_distributed,
     init_distributed,
@@ -158,10 +158,39 @@ def train(config_path: str | Path):
 
     raw_model = model.module if (is_ddp or is_fsdp) else model
 
-    train_dataset = TokenDataset(
-        os.path.join(data_dir, "train.bin"), block_size=config.data.block_size
-    )
-    val_dataset = TokenDataset(os.path.join(data_dir, "val.bin"), block_size=config.data.block_size)
+    if config.data.sources:
+        train_datasets = [
+            TokenDataset(
+                src.path.replace(".bin", "_train.bin") if "train" not in src.path else src.path,
+                block_size=config.data.block_size,
+            )
+            for src in config.data.sources
+        ]
+        val_datasets = [
+            TokenDataset(
+                src.path.replace(".bin", "_val.bin")
+                if "val" not in src.path
+                else src.path.replace("train", "val"),
+                block_size=config.data.block_size,
+            )
+            for src in config.data.sources
+        ]
+        weights = [src.weight for src in config.data.sources]
+
+        train_dataset = MixtureDataset(train_datasets, weights, seed=1337)
+        val_dataset = MixtureDataset(val_datasets, weights, seed=1337)
+
+        if master_process:
+            print(f"Mixture dataset: {len(config.data.sources)} sources")
+            for i, src in enumerate(config.data.sources):
+                print(f"  [{i}] {src.path} (weight={src.weight:.2f})")
+    else:
+        train_dataset = TokenDataset(
+            os.path.join(data_dir, "train.bin"), block_size=config.data.block_size
+        )
+        val_dataset = TokenDataset(
+            os.path.join(data_dir, "val.bin"), block_size=config.data.block_size
+        )
 
     train_sampler = DistributedSampler(train_dataset, shuffle=True) if world_size > 1 else None
     val_sampler = DistributedSampler(val_dataset, shuffle=False) if world_size > 1 else None

@@ -107,6 +107,9 @@ def wrap_model_distributed(
 def init_distributed(backend: str = "nccl") -> tuple[bool, int, int]:
     """Initialize distributed process group if needed.
 
+    Launch with: torchrun --nproc_per_node=N script.py
+    Assumes: shared filesystem for checkpoints.
+
     Args:
         backend: Distributed backend ('nccl' for GPU, 'gloo' for CPU)
 

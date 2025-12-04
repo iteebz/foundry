@@ -9,10 +9,17 @@ from foundry.model import GPTConfig
 
 
 @dataclass
+class DataSource:
+    path: str
+    weight: float = 1.0
+
+
+@dataclass
 class DataConfig:
     dataset: str = "openwebtext"
     batch_size: int = 64
     block_size: int = 256
+    sources: list[DataSource] = field(default_factory=list)
 
 
 @dataclass
@@ -86,13 +93,10 @@ class RunConfig:
         training_config = TrainingConfig(**training_args)
 
         data_args = raw.get("data", {})
-        if "dataset" in training_args:
-            data_args.setdefault("dataset", training_args["dataset"])
-        if "batch_size" in training_args:
-            data_args.setdefault("batch_size", training_args["batch_size"])
-        if "block_size" in model_args:
-            data_args.setdefault("block_size", model_args["block_size"])
-        data_config = DataConfig(**data_args)
+
+        sources_raw = data_args.pop("sources", [])
+        sources = [DataSource(**s) for s in sources_raw] if sources_raw else []
+        data_config = DataConfig(**data_args, sources=sources)
 
         lora_args = raw.get("lora", {})
         lora_config = LoRAConfig(**lora_args)
