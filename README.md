@@ -112,6 +112,22 @@ python sweep.py lr 3e-4 6e-4 1e-3 --promote
 
 Each `--promote` replaces baseline with the winning mutation. The loop self-improves without human intervention.
 
+## Model Zoo
+
+Load pretrained models as starting points:
+
+```bash
+# Load model config (llama3, mistral, qwen2)
+python -m src.zoo llama3-1b
+
+# Use in training (after downloading checkpoint)
+# Add to experiment YAML:
+# init_from: "pretrained"
+# checkpoint: "path/to/llama3.pt"
+```
+
+Available configs: llama3-8b, llama3-1b, mistral-7b, qwen2-7b
+
 ## LoRA Finetuning
 
 Low-rank adaptation for efficient finetuning:
@@ -125,10 +141,22 @@ python src/train.py experiments/lora_r16.yaml
 
 # Sweep LoRA hyperparameters
 python sweep.py lora_rank 4 8 16 32 64 --promote
-python sweep.py lora_alpha 8 16 32 64 --promote
 ```
 
 LoRA reduces trainable params by 90-99%, enabling finetuning on limited hardware.
+
+## Conversation Data
+
+Format chat/instruction data for training:
+
+```bash
+# Generate conversation format mutation
+python -m src.mutate conversation_format chatml
+
+# Formats: chatml, llama3, alpaca
+```
+
+Supports ShareGPT and OpenAI message formats. See `src/data/conversation.py`.
 
 ### Mutation Surfaces
 
@@ -141,10 +169,11 @@ LoRA reduces trainable params by 90-99%, enabling finetuning on limited hardware
 6. **Loss** - CrossEntropy, Focal, LabelSmoothing
 7. **Training** - LR, batch size, warmup, grad clip
 8. **Optimizer** - Weight decay, Adam betas
-9. **Data** - Filtering, dedupe
+9. **Data** - Filtering, dedupe, conversation formats
 10. **LoRA** - Rank, alpha, dropout (finetuning)
+11. **Model Zoo** - Load pretrained (llama3, mistral, qwen2)
 
 **Future:**
 - Advanced attention (MLA, sliding window, sparse)
-- Model zoo (load pretrained llama/mistral)
 - Curriculum learning
+- Multi-GPU DDP validation

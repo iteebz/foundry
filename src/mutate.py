@@ -320,6 +320,31 @@ def mutate_lora_dropout(
     return config
 
 
+def mutate_conversation_format(
+    format_type: str = "chatml",
+    base_config: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Generate conversation format mutations.
+    
+    Variants:
+        chatml: ChatML format (default)
+        llama3: Llama3 chat format
+        alpaca: Alpaca instruction format
+    """
+    config = base_config or load_baseline()
+    
+    variants = ["chatml", "llama3", "alpaca"]
+    if format_type not in variants:
+        raise ValueError(f"Unknown format: {format_type}. Choose from {variants}")
+    
+    config["name"] = f"conv_{format_type}"
+    if "data" not in config:
+        config["data"] = {}
+    config["data"]["conversation_format"] = format_type
+    
+    return config
+
+
 def save_mutation(config: Dict[str, Any], output_dir: str = "experiments") -> Path:
     """Save mutation config to YAML."""
     output_path = Path(output_dir) / f"{config['name']}.yaml"
@@ -364,6 +389,7 @@ def generate_sweep(
         "lora_rank": mutate_lora_rank,
         "lora_alpha": mutate_lora_alpha,
         "lora_dropout": mutate_lora_dropout,
+        "conversation_format": mutate_conversation_format,
     }
     
     if mutation_type not in mutation_funcs:
@@ -388,13 +414,13 @@ if __name__ == "__main__":
         print("Usage: python -m src.mutate <type> <variant>")
         print("Types: attention, depth, width, lr, norm, activation, position, loss,")
         print("       batch_size, warmup, grad_clip, weight_decay, adam_betas,")
-        print("       lora_rank, lora_alpha, lora_dropout")
+        print("       lora_rank, lora_alpha, lora_dropout, conversation_format")
         print("\nExamples:")
         print("  python -m src.mutate attention gqa_2kv")
         print("  python -m src.mutate depth 8")
         print("  python -m src.mutate lr 3e-4")
         print("  python -m src.mutate lora_rank 16")
-        print("  python -m src.mutate lora_alpha 32")
+        print("  python -m src.mutate conversation_format chatml")
         sys.exit(1)
     
     mutation_type = sys.argv[1]
@@ -434,6 +460,8 @@ if __name__ == "__main__":
         config = mutate_lora_alpha(int(sys.argv[2]))
     elif mutation_type == "lora_dropout":
         config = mutate_lora_dropout(float(sys.argv[2]))
+    elif mutation_type == "conversation_format":
+        config = mutate_conversation_format(sys.argv[2])
     else:
         print(f"Unknown mutation type: {mutation_type}")
         sys.exit(1)
