@@ -226,6 +226,30 @@ def mutate_grad_clip(
     return config
 
 
+def mutate_data_filter(
+    min_len: int,
+    max_len: Optional[int] = None,
+    dedupe: bool = True,
+    base_config: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """Generate data filtering mutations."""
+    config = base_config or load_baseline()
+    config["name"] = f"filter_min{min_len}"
+    if max_len:
+        config["name"] += f"_max{max_len}"
+    if dedupe:
+        config["name"] += "_dedupe"
+    
+    if "data" not in config:
+        config["data"] = {}
+    config["data"]["min_len"] = min_len
+    if max_len:
+        config["data"]["max_len"] = max_len
+    config["data"]["dedupe"] = dedupe
+    
+    return config
+
+
 def save_mutation(config: Dict[str, Any], output_dir: str = "experiments") -> Path:
     """Save mutation config to YAML."""
     output_path = Path(output_dir) / f"{config['name']}.yaml"
@@ -264,6 +288,7 @@ def generate_sweep(
         "batch_size": mutate_batch_size,
         "warmup": mutate_warmup,
         "grad_clip": mutate_grad_clip,
+        "data_filter": mutate_data_filter,
     }
     
     if mutation_type not in mutation_funcs:

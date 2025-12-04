@@ -1,46 +1,25 @@
-import os
-import pickle
-import requests
-import numpy as np
+"""Prepare Shakespeare dataset using data pipeline modules."""
 
-input_file_path = os.path.join(os.path.dirname(__file__), 'input.txt')
-if not os.path.exists(input_file_path):
-    data_url = 'https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt'
-    with open(input_file_path, 'w') as f:
-        f.write(requests.get(data_url).text)
+import sys
+from pathlib import Path
 
-with open(input_file_path, 'r') as f:
-    data = f.read()
-print(f"length of dataset in characters: {len(data):,}")
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-chars = sorted(list(set(data)))
-vocab_size = len(chars)
-print("all the unique characters:", ''.join(chars))
-print(f"vocab size: {vocab_size:,}")
+from data.pack import prepare_dataset
+from data.filter import dedupe, length_filter
 
-stoi = { ch:i for i,ch in enumerate(chars) }
-itos = { i:ch for i,ch in enumerate(chars) }
-encode = lambda s: [stoi[c] for c in s]
-decode = lambda l: ''.join([itos[i] for i in l])
+data_dir = Path(__file__).parent
+input_path = data_dir / 'input.txt'
 
-n = len(data)
-train_data = data[:int(n*0.9)]
-val_data = data[int(n*0.9):]
+if not input_path.exists():
+    import requests
+    url = 'https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt'
+    input_path.write_text(requests.get(url).text)
 
-train_ids = encode(train_data)
-val_ids = encode(val_data)
-print(f"train has {len(train_ids):,} tokens")
-print(f"val has {len(val_ids):,} tokens")
+text = input_path.read_text()
+print(f"length of dataset in characters: {len(text):,}")
 
-train_ids = np.array(train_ids, dtype=np.uint16)
-val_ids = np.array(val_ids, dtype=np.uint16)
-train_ids.tofile(os.path.join(os.path.dirname(__file__), 'train.bin'))
-val_ids.tofile(os.path.join(os.path.dirname(__file__), 'val.bin'))
-
-meta = {
-    'vocab_size': vocab_size,
-    'itos': itos,
-    'stoi': stoi,
-}
-with open(os.path.join(os.path.dirname(__file__), 'meta.pkl'), 'wb') as f:
-    pickle.dump(meta, f)
+stats = prepare_dataset(text, data_dir, train_split=0.9)
+print(f"train has {stats['train_tokens']:,} tokens")
+print(f"val has {stats['val_tokens']:,} tokens")
+print(f"vocab size: {stats['vocab_size']:,}")

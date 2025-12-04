@@ -98,13 +98,15 @@ Mutations saved to `experiments/*.yaml`, ready for training.
 
 **Implemented:**
 1. **Attention** - GQA (2kv, 1kv), MHA
-2. **Depth/Width** - Layer/embedding scaling
+2. **Architecture** - Depth/width scaling
 3. **Normalization** - RMSNorm, LayerNorm, QKNorm
 4. **Activation** - SwiGLU, GELU, GLU
 5. **Position Encoding** - RoPE, ALiBi
-6. **Hyperparameters** - Learning rate
+6. **Loss** - CrossEntropy, Focal, LabelSmoothing
+7. **Training** - LR, batch size, warmup, grad clip
+8. **Data** - Filtering, dedupe
 
-**Remaining:**
-- Loss functions (focal, label smoothing)
-- Data pipeline (curriculum, filtering, packing)
+**Future:**
 - Advanced attention (MLA, sliding window, sparse)
+- Optimizer variants (AdamW, Lion, Sophia)
+- Curriculum learning
