@@ -1,13 +1,8 @@
 """Tests for DPO loss."""
 
-import sys
-from pathlib import Path
-
 import torch
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
-from modules.dpo_loss import DPOLoss, compute_log_probs
+from foundry.modules.dpo_loss import DPOLoss, compute_log_probs
 
 
 def test_dpo_loss_basic():
@@ -65,16 +60,12 @@ def test_dpo_loss_prefers_chosen():
     reference_chosen = torch.tensor([1.0])
     reference_rejected = torch.tensor([1.0])
 
-    loss_high = dpo(
-        policy_chosen_high, policy_rejected_low, reference_chosen, reference_rejected
-    )
+    loss_high = dpo(policy_chosen_high, policy_rejected_low, reference_chosen, reference_rejected)
 
     policy_chosen_low = torch.tensor([0.5])
     policy_rejected_high = torch.tensor([2.0])
 
-    loss_low = dpo(
-        policy_chosen_low, policy_rejected_high, reference_chosen, reference_rejected
-    )
+    loss_low = dpo(policy_chosen_low, policy_rejected_high, reference_chosen, reference_rejected)
 
     assert loss_high < loss_low
 

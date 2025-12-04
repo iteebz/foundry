@@ -1,13 +1,10 @@
-import sys
 import tempfile
 from pathlib import Path
 
 import torch
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
-from checkpoint import load_checkpoint, save_checkpoint
-from model import GPT, GPTConfig
+from foundry.checkpoint import load_checkpoint, save_checkpoint
+from foundry.model import GPT, GPTConfig
 
 
 def test_save_load_checkpoint():

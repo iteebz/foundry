@@ -1,14 +1,9 @@
 """Tests for LoRA module."""
 
-import sys
-from pathlib import Path
-
 import torch
 import torch.nn as nn
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
-from lora import (
+from foundry.lora import (
     LoRALinear,
     apply_lora_to_model,
     get_lora_params,

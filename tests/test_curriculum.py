@@ -1,14 +1,9 @@
 """Tests for curriculum learning."""
 
-import sys
-from pathlib import Path
-
 import torch
 import torch.nn as nn
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
-from data.curriculum import (
+from foundry.data.curriculum import (
     curriculum_schedule,
     get_curriculum_stage,
     order_by_difficulty,
@@ -41,7 +36,7 @@ def test_score_by_perplexity():
     """Score by perplexity uses model loss."""
     model = DummyModel()
     tokens = [1, 2, 3, 4, 5]
-    
+
     score = score_by_perplexity(tokens, model)
     assert isinstance(score, float)
     assert score >= 0.0
@@ -50,9 +45,9 @@ def test_score_by_perplexity():
 def test_order_by_difficulty():
     """Order dataset by difficulty."""
     dataset = [[1, 2], [1, 2, 3, 4, 5], [1, 2, 3]]
-    
+
     ordered = order_by_difficulty(dataset, score_by_length)
-    
+
     assert len(ordered[0]) == 2
     assert len(ordered[1]) == 3
     assert len(ordered[2]) == 5
@@ -61,9 +56,9 @@ def test_order_by_difficulty():
 def test_curriculum_schedule_linear():
     """Linear curriculum includes all previous stages."""
     dataset = [[i] * (i + 1) for i in range(8)]
-    
+
     stages = curriculum_schedule(dataset, score_by_length, schedule="linear", num_stages=4)
-    
+
     assert len(stages) == 4
     assert len(stages[0]) == 2
     assert len(stages[1]) == 4
@@ -74,9 +69,9 @@ def test_curriculum_schedule_linear():
 def test_curriculum_schedule_step():
     """Step curriculum has disjoint stages."""
     dataset = [[i] * (i + 1) for i in range(8)]
-    
+
     stages = curriculum_schedule(dataset, score_by_length, schedule="step", num_stages=4)
-    
+
     assert len(stages) == 4
     for stage in stages[:3]:
         assert len(stage) == 2

@@ -1,14 +1,9 @@
 """Tests for evaluation harness."""
 
-import sys
-from pathlib import Path
-
 import numpy as np
 import torch
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-
-from eval import evaluate
+from foundry.eval import evaluate
 
 
 class DummyModel:
