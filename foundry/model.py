@@ -22,6 +22,13 @@ from foundry.modules.sparse_attention import SparseAttentionMask
 from foundry.modules.swiglu import SwiGLU
 
 
+def _build_norm(config) -> nn.Module:
+    """Build normalization layer from config."""
+    if config.norm_type == "layernorm":
+        return LayerNorm(config.n_embd, bias=config.bias)
+    return RMSNorm(config.n_embd)
+
+
 class CausalSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -33,14 +40,14 @@ class CausalSelfAttention(nn.Module):
         self.use_rope = config.position_encoding == "rope"
         self.use_alibi = config.position_encoding == "alibi"
         self.use_mla = config.attention_type == "mla"
-        self.use_sliding_window = getattr(config, "sliding_window_size", None) is not None
-        self.use_sparse = getattr(config, "sparse_block_size", None) is not None
+        self.use_sliding_window = config.sliding_window_size is not None
+        self.use_sparse = config.sparse_block_size is not None
 
         if self.use_mla:
             self.mla = MultiLatentAttention(
                 config.n_embd,
                 config.n_head,
-                latent_dim=getattr(config, "mla_latent_dim", config.n_embd // 2),
+                latent_dim=config.mla_latent_dim,
                 bias=config.bias,
                 dropout=config.dropout,
                 block_size=config.block_size,
@@ -67,9 +74,13 @@ class CausalSelfAttention(nn.Module):
             if self.use_sparse:
                 self.sparse = SparseAttentionMask(
                     block_size=config.sparse_block_size,
-                    stride=getattr(config, "sparse_stride", config.sparse_block_size),
+                    stride=config.sparse_stride,
                     max_seq_len=config.block_size,
                 )
+
+    def _apply_mask(self, position_bias, mask):
+        """Combine position bias with attention mask."""
+        return position_bias * mask if position_bias is not None else mask
 
     def forward(self, x):
         if self.use_mla:
@@ -81,40 +92,31 @@ class CausalSelfAttention(nn.Module):
         k = self.gqa.k_proj(x).view(B, T, self.n_kv_head, self.head_dim).transpose(1, 2)
         v = self.gqa.v_proj(x).view(B, T, self.n_kv_head, self.head_dim).transpose(1, 2)
 
-        attn_bias = None
+        position_bias = None
         if self.use_rope:
             cos, sin = self.rope(x, T)
             cos = cos.unsqueeze(0).unsqueeze(1)
             sin = sin.unsqueeze(0).unsqueeze(1)
             q, k = apply_rotary_emb(q, k, cos, sin)
         elif self.use_alibi:
-            attn_bias = self.alibi(T)
+            position_bias = self.alibi(T)
 
         k = k.repeat_interleave(self.gqa.n_rep, dim=1)
         v = v.repeat_interleave(self.gqa.n_rep, dim=1)
 
+        is_causal = True
         if self.use_sliding_window:
-            sw_mask = self.sliding_window(T)
-            if attn_bias is not None:
-                attn_bias = attn_bias * sw_mask
-            else:
-                attn_bias = sw_mask
+            position_bias = self._apply_mask(position_bias, self.sliding_window(T))
             is_causal = False
         elif self.use_sparse:
-            sparse_mask = self.sparse(T)
-            if attn_bias is not None:
-                attn_bias = attn_bias * sparse_mask
-            else:
-                attn_bias = sparse_mask
+            position_bias = self._apply_mask(position_bias, self.sparse(T))
             is_causal = False
-        else:
-            is_causal = True
 
         y = F.scaled_dot_product_attention(
             q,
             k,
             v,
-            attn_mask=attn_bias,
+            attn_mask=position_bias,
             dropout_p=self.gqa.attn_dropout.p if self.training else 0.0,
             is_causal=is_causal,
         )
@@ -126,24 +128,16 @@ class CausalSelfAttention(nn.Module):
 class Block(nn.Module):
     def __init__(self, config):
         super().__init__()
-        norm_cls = LayerNorm if config.norm_type == "layernorm" else RMSNorm
-        self.ln_1 = (
-            norm_cls(config.n_embd, bias=config.bias)
-            if config.norm_type == "layernorm"
-            else norm_cls(config.n_embd)
-        )
+        self.config = config
+        self.ln_1 = _build_norm(config)
         self.attn = CausalSelfAttention(config)
-        self.ln_2 = (
-            norm_cls(config.n_embd, bias=config.bias)
-            if config.norm_type == "layernorm"
-            else norm_cls(config.n_embd)
-        )
+        self.ln_2 = _build_norm(config)
 
         if config.mlp_type == "moe":
             self.mlp = MoELayer(
                 config.n_embd,
-                n_experts=getattr(config, "moe_n_experts", 8),
-                top_k=getattr(config, "moe_top_k", 2),
+                n_experts=config.moe_n_experts,
+                top_k=config.moe_top_k,
                 bias=config.bias,
                 dropout=config.dropout,
             )
@@ -157,8 +151,14 @@ class Block(nn.Module):
             self.mlp = act_cls(config.n_embd, bias=config.bias)
 
     def forward(self, x):
-        x = x + self.attn(self.ln_1(x))
-        return x + self.mlp(self.ln_2(x))
+        if hasattr(self.config, "gradient_checkpointing") and self.config.gradient_checkpointing and self.training:
+            from torch.utils.checkpoint import checkpoint
+            x = x + checkpoint(self.attn, self.ln_1(x), use_reentrant=False)
+            x = x + checkpoint(self.mlp, self.ln_2(x), use_reentrant=False)
+        else:
+            x = x + self.attn(self.ln_1(x))
+            x = x + self.mlp(self.ln_2(x))
+        return x
 
 
 @dataclass
@@ -176,13 +176,54 @@ class GPTConfig:
     position_encoding: str = "rope"
     loss_type: str = "cross_entropy"
     attention_type: str = "gqa"
-    mla_latent_dim: int = None
+    mla_latent_dim: int | None = None
     mlp_type: str = "standard"
     moe_n_experts: int = 8
     moe_top_k: int = 2
-    sliding_window_size: int = None
-    sparse_block_size: int = None
-    sparse_stride: int = None
+    sliding_window_size: int | None = None
+    sparse_block_size: int | None = None
+    sparse_stride: int | None = None
+    gradient_checkpointing: bool = False
+
+    def __post_init__(self):
+        """Validate config parameters."""
+        if self.n_embd % self.n_head != 0:
+            raise ValueError(f"n_embd ({self.n_embd}) must be divisible by n_head ({self.n_head})")
+
+        if self.n_kv_head > self.n_head:
+            raise ValueError(f"n_kv_head ({self.n_kv_head}) cannot exceed n_head ({self.n_head})")
+
+        if self.attention_type == "mla" and self.mla_latent_dim is None:
+            raise ValueError("mla_latent_dim required when attention_type='mla'")
+
+        if self.sparse_block_size is not None and self.sparse_stride is None:
+            self.sparse_stride = self.sparse_block_size
+
+        if self.attention_type == "mla" and self.mla_latent_dim is None:
+            self.mla_latent_dim = self.n_embd // 2
+
+        if self.mlp_type == "moe" and self.moe_top_k > self.moe_n_experts:
+            raise ValueError(
+                f"moe_top_k ({self.moe_top_k}) cannot exceed moe_n_experts ({self.moe_n_experts})"
+            )
+
+        if self.norm_type not in ["rmsnorm", "layernorm"]:
+            raise ValueError(f"Unknown norm_type: {self.norm_type}")
+
+        if self.position_encoding not in ["rope", "alibi"]:
+            raise ValueError(f"Unknown position_encoding: {self.position_encoding}")
+
+        if self.activation not in ["swiglu", "gelu", "glu"]:
+            raise ValueError(f"Unknown activation: {self.activation}")
+
+        if self.loss_type not in ["cross_entropy", "focal", "label_smoothing", "dpo"]:
+            raise ValueError(f"Unknown loss_type: {self.loss_type}")
+
+        if self.attention_type not in ["gqa", "mla"]:
+            raise ValueError(f"Unknown attention_type: {self.attention_type}")
+
+        if self.mlp_type not in ["standard", "moe"]:
+            raise ValueError(f"Unknown mlp_type: {self.mlp_type}")
 
 
 class GPT(nn.Module):

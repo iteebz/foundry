@@ -13,8 +13,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-sys.path.insert(0, str(Path(__file__).parent / "src"))
-
 
 def lr_find(model, get_batch, device, ctx, min_lr=1e-7, max_lr=10, num_steps=100, beta=0.98):
     """Find optimal learning rate using exponential range test."""

@@ -1,9 +1,25 @@
 """Core mutation utilities."""
 
+from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+
+@dataclass
+class MutationMetadata:
+    """Mutation provenance tracking."""
+
+    parent_config: str
+    mutation_type: str
+    variant: str
+    timestamp: str
+    generation: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
 
 def load_baseline() -> dict[str, Any]:
@@ -16,8 +32,15 @@ def load_baseline() -> dict[str, Any]:
         return yaml.safe_load(f)
 
 
-def save_mutation(config: dict[str, Any], output_dir: str = "experiments") -> Path:
-    """Save mutation config to YAML."""
+def save_mutation(
+    config: dict[str, Any],
+    output_dir: str = "experiments",
+    metadata: MutationMetadata | None = None,
+) -> Path:
+    """Save mutation config to YAML with provenance tracking."""
+    if metadata:
+        config["_metadata"] = metadata.to_dict()
+
     output_path = Path(output_dir) / f"{config['name']}.yaml"
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -30,7 +53,7 @@ def save_mutation(config: dict[str, Any], output_dir: str = "experiments") -> Pa
 def generate_sweep(
     mutation_type: str, variants: list, output_dir: str = "experiments"
 ) -> list[Path]:
-    """Generate a sweep of mutations."""
+    """Generate a sweep of mutations with provenance tracking."""
     from .architecture import (
         mutate_activation,
         mutate_attention,
@@ -88,9 +111,21 @@ def generate_sweep(
     func = mutation_funcs[mutation_type]
     paths = []
 
+    baseline = load_baseline()
+    parent_generation = baseline.get("_metadata", {}).get("generation", 0)
+
     for variant in variants:
         config = func(variant)
-        path = save_mutation(config, output_dir)
+
+        metadata = MutationMetadata(
+            parent_config="experiments/baseline.yaml",
+            mutation_type=mutation_type,
+            variant=str(variant),
+            timestamp=datetime.now().isoformat(),
+            generation=parent_generation + 1,
+        )
+
+        path = save_mutation(config, output_dir, metadata)
         paths.append(path)
         print(f"Generated: {path}")
 

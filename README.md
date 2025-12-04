@@ -1,180 +1,124 @@
 # Foundry
 
-Agent-modifiable nanoGPT training infrastructure.
+Autonomous ML training infrastructure. 4,100 LOC. Zero ceremony.
 
 ## Quick Start
 
 ```bash
-# Install dependencies
-poetry install
-
 # Train baseline
-python src/train.py experiments/baseline.yaml
+python -m foundry.train experiments/baseline.yaml
 
-# Generate single mutation
-python -m src.mutate attention gqa_2kv
+# Generate mutation
+python -m foundry.mutate attention mla
 
-# Compare baseline vs mutation
-python compare.py experiments/baseline.yaml experiments/attn_gqa_2kv.yaml
-
-# Run parallel sweep (autonomous iteration)
-python sweep.py attention gqa_2kv gqa_1kv mha --promote
+# Autonomous sweep
+python -m foundry.cli.sweep attention mla gqa_2kv --eval-task gsm8k --promote
 ```
 
-## Mutation Framework
-
-Experiments are YAML configs that specify model architecture and training parameters:
-
-```yaml
-name: "baseline"
-
-training:
-  max_iters: 5000
-  learning_rate: 6e-4
-  dataset: "shakespeare_char"
-
-model_args:
-  n_layer: 6
-  n_head: 6
-  n_kv_head: 2
-  n_embd: 384
-```
-
-Flow: `experiments/*.yaml` → `train.py`
-
-Usage: `python src/train.py experiments/baseline.yaml`
-
-## Architecture
+## The Loop
 
 ```
-foundry/
-├── experiments/
-│   └── baseline.yaml
-├── src/
-│   ├── model.py
-│   ├── model_factory.py
-│   ├── train.py
-│   ├── mutate.py
-│   └── modules/
-│       ├── rope.py, alibi.py
-│       ├── gqa.py
-│       ├── rmsnorm.py, layernorm.py, qknorm.py
-│       └── swiglu.py, gelu.py, glu.py
-└── tests/
+mutate → train → evaluate → promote → repeat
 ```
 
-### Mutation Engine
+Agents propose mutations, train in parallel, rank by capability, promote winners autonomously.
 
-Generate experiment configs programmatically:
+## Mutations
+
+26 mutation types across architecture, training, data:
+
+**Architecture:**
+- Attention: GQA, MLA, MoE, sliding window, sparse
+- Depth/width scaling
+- Norm: RMSNorm, LayerNorm
+- Activation: SwiGLU, GELU, GLU
+- Position: RoPE, ALiBi
+- Loss: CrossEntropy, Focal, LabelSmoothing, DPO
+
+**Training:**
+- LR, batch size, warmup, grad clip
+- Weight decay, Adam betas
+- LoRA rank/alpha/dropout
+
+**Data:**
+- Curriculum learning (length, perplexity)
+- Conversation formats (ChatML, Llama3, Alpaca)
+- Constitution injection (preference pairs)
+- Filtering, dedupe
+
+## Eval Harness
+
+Rank mutations by capability, not loss:
 
 ```bash
-# Attention
-python -m src.mutate attention gqa_2kv
-python -m src.mutate attention mha
-
-# Architecture
-python -m src.mutate depth 8
-python -m src.mutate width 512
-
-# Normalization
-python -m src.mutate norm layernorm
-python -m src.mutate norm rmsnorm
-
-# Activation
-python -m src.mutate activation gelu
-python -m src.mutate activation glu
-
-# Position encoding
-python -m src.mutate position alibi
-python -m src.mutate position rope
-
-# Hyperparameters
-python -m src.mutate lr 3e-4
+python -m foundry.cli.sweep norm rmsnorm layernorm \\
+  --eval-task gsm8k --promote --jobs 4
 ```
 
-Mutations saved to `experiments/*.yaml`, ready for training.
-
-## Autonomous Iteration
-
-The sweep runner enables fully autonomous architecture search:
-
-```bash
-# Generate + train + rank mutations in parallel
-python sweep.py norm rmsnorm layernorm --jobs 8 --promote
-
-# Auto-promotes winner to baseline.yaml
-# Next sweep builds on the winner automatically
-python sweep.py activation swiglu gelu glu --promote
-
-# Iterate indefinitely
-python sweep.py lr 3e-4 6e-4 1e-3 --promote
-```
-
-Each `--promote` replaces baseline with the winning mutation. The loop self-improves without human intervention.
+Tasks: GSM8K (math), MMLU (knowledge), HumanEval (code), Constitution (alignment)
 
 ## Model Zoo
 
-Load pretrained models as starting points:
+Start from pretrained:
 
-```bash
-# Load model config (llama3, mistral, qwen2)
-python -m src.zoo llama3-1b
+```python
+from foundry.zoo import load_pretrained
 
-# Use in training (after downloading checkpoint)
-# Add to experiment YAML:
-# init_from: "pretrained"
-# checkpoint: "path/to/llama3.pt"
+model = load_pretrained("llama3-1b", device="cuda")
 ```
 
-Available configs: llama3-8b, llama3-1b, mistral-7b, qwen2-7b
+Configs: llama3-8b, llama3-1b, mistral-7b, qwen2-7b
 
 ## LoRA Finetuning
 
-Low-rank adaptation for efficient finetuning:
+90-99% param reduction:
 
 ```bash
-# Generate LoRA config
-python -m src.mutate lora_rank 16
-
-# Train with LoRA (freezes base, trains adapters)
-python src/train.py experiments/lora_r16.yaml
-
-# Sweep LoRA hyperparameters
-python sweep.py lora_rank 4 8 16 32 64 --promote
+python -m foundry.mutate lora_rank 16
+python -m foundry.train experiments/lora_r16.yaml
 ```
 
-LoRA reduces trainable params by 90-99%, enabling finetuning on limited hardware.
+## Tokenizers
 
-## Conversation Data
+- **CharTokenizer** - Toy datasets (Shakespeare)
+- **BPETokenizer** - Production (configurable vocab_size)
 
-Format chat/instruction data for training:
+```python
+from foundry.data.tokenize import BPETokenizer
 
-```bash
-# Generate conversation format mutation
-python -m src.mutate conversation_format chatml
-
-# Formats: chatml, llama3, alpaca
+tok = BPETokenizer(vocab_size=50257)
+tok.fit(corpus)
+ids = tok.encode("hello world")
 ```
 
-Supports ShareGPT and OpenAI message formats. See `src/data/conversation.py`.
+## Structure
 
-### Mutation Surfaces
+```
+foundry/
+├── foundry/          # Package
+│   ├── model.py      # GPT (361 LOC)
+│   ├── train.py      # Training loop (357 LOC)
+│   ├── modules/      # Swappable components
+│   ├── data/         # Tokenize, curriculum, pack
+│   ├── mutate/       # Config generation
+│   ├── benchmarks/   # Eval tasks
+│   └── cli/          # sweep, compare, lr_finder
+├── tests/            # 181 tests
+└── experiments/      # YAML configs
+```
 
-**Implemented:**
-1. **Attention** - GQA (2kv, 1kv), MHA, MLA (DeepSeek), MoE, Sliding Window, Sparse
-2. **Architecture** - Depth/width scaling
-3. **Normalization** - RMSNorm, LayerNorm, QKNorm
-4. **Activation** - SwiGLU, GELU, GLU
-5. **Position Encoding** - RoPE, ALiBi
-6. **Loss** - CrossEntropy, Focal, LabelSmoothing
-7. **Training** - LR, batch size, warmup, grad clip
-8. **Optimizer** - Weight decay, Adam betas
-9. **Data** - Filtering, dedupe, conversation formats
-10. **LoRA** - Rank, alpha, dropout (finetuning)
-11. **Model Zoo** - Load pretrained (llama3, mistral, qwen2)
+## Design
 
-**Advanced Attention:**
-- MLA: Multi-latent compression (DeepSeek)
-- MoE: Mixture of experts routing
-- Sliding Window: Local attention window
-- Sparse: Strided local + global patterns
+1. **Reference grade** - All files <450 LOC, modules <75 LOC
+2. **Agent-parseable** - Zero ceremony, clear structure
+3. **Composable** - Mutations stack, configs override
+4. **Autonomous** - Sweep runner closes the loop
+
+See [docs/architecture.md](docs/architecture.md) for details.
+
+## What Makes This Different
+
+**nanoGPT** - Human-readable training code  
+**Foundry** - Agent-iterable mutation infrastructure
+
+Karpathy optimized for pedagogy. We optimized for recursion.

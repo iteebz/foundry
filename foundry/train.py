@@ -54,6 +54,7 @@ device = (
 )
 dtype = "bfloat16" if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else "float16"
 compile = True
+compile_mode = "default"
 lora_enabled = False
 lora_r = 8
 lora_alpha = 16
@@ -235,10 +236,11 @@ if init_from == "resume":
     optimizer.load_state_dict(checkpoint["optimizer"])
 checkpoint = None
 
+compile_mode = globals().get("compile_mode", "default")
 if compile:
-    print("compiling the model... (takes a ~minute)")
+    print(f"compiling the model with mode={compile_mode}... (takes a ~minute)")
     unoptimized_model = model
-    model = torch.compile(model)
+    model = torch.compile(model, mode=compile_mode)
 
 if ddp:
     model = DistributedDataParallel(model, device_ids=[ddp_local_rank])

@@ -18,12 +18,9 @@ def run_eval_on_checkpoint(checkpoint_path: Path, eval_task: str) -> float:
         sys.executable,
         "-c",
         f"""import torch
-import sys
-from pathlib import Path
-sys.path.insert(0, 'src')
 from foundry.benchmarks.harness import run_benchmark_suite
-from model import GPT
-from ..data.tokenize import CharTokenizer
+from foundry.model import GPT
+from foundry.data.tokenize import CharTokenizer
 
 checkpoint = torch.load('{checkpoint_path}')
 model = GPT(checkpoint['config'])
@@ -71,7 +68,9 @@ def generate_mutation(mutation_type: str, variant: str) -> Path:
 
 def train_mutation(experiment_path: Path, eval_task: str | None = None) -> dict:
     """Train single mutation, return metrics."""
-    cmd = [sys.executable, "src/train.py", str(experiment_path)]
+    from foundry.metrics import MetricLogger
+
+    cmd = [sys.executable, "-m", "foundry.train", str(experiment_path)]
     result = subprocess.run(cmd, capture_output=True, text=True)
 
     if result.returncode != 0:
@@ -81,19 +80,26 @@ def train_mutation(experiment_path: Path, eval_task: str | None = None) -> dict:
             "error": result.stderr,
         }
 
-    val_loss = None
-    train_loss = None
+    out_dir = Path("out")
+    logger = MetricLogger(str(out_dir))
+    final_metrics = logger.get_final_metrics()
 
-    for line in reversed(result.stdout.strip().split("\n")):
-        if "train loss" in line and "val loss" in line:
-            parts = line.split()
-            for i, part in enumerate(parts):
-                if part == "loss" and i > 0 and parts[i - 1] == "train":
-                    train_loss = float(parts[i + 1].rstrip(","))
-                if part == "loss" and i > 0 and parts[i - 1] == "val":
-                    val_loss = float(parts[i + 1])
-            if val_loss and train_loss:
-                break
+    if final_metrics and "val_loss" in final_metrics and "train_loss" in final_metrics:
+        val_loss = final_metrics["val_loss"]
+        train_loss = final_metrics["train_loss"]
+    else:
+        val_loss = None
+        train_loss = None
+        for line in reversed(result.stdout.strip().split("\n")):
+            if "train loss" in line and "val loss" in line:
+                parts = line.split()
+                for i, part in enumerate(parts):
+                    if part == "loss" and i > 0 and parts[i - 1] == "train":
+                        train_loss = float(parts[i + 1].rstrip(","))
+                    if part == "loss" and i > 0 and parts[i - 1] == "val":
+                        val_loss = float(parts[i + 1])
+                if val_loss and train_loss:
+                    break
 
     metrics = {
         "experiment": experiment_path.stem,

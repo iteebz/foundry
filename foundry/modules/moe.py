@@ -42,8 +42,8 @@ class MoELayer(nn.Module):
 
     def forward(self, x):
         B, T, C = x.size()
-
         x_flat = x.view(-1, C)
+        num_tokens = x_flat.size(0)
 
         router_logits = self.router(x_flat)
         routing_weights = F.softmax(router_logits, dim=-1)
@@ -51,17 +51,43 @@ class MoELayer(nn.Module):
         top_k_weights, top_k_indices = torch.topk(routing_weights, self.top_k, dim=-1)
         top_k_weights = top_k_weights / top_k_weights.sum(dim=-1, keepdim=True)
 
+        top_k_weights_flat = top_k_weights.view(-1)
+        top_k_indices_flat = top_k_indices.view(-1)
+
+        token_indices = torch.arange(num_tokens, device=x.device).repeat_interleave(self.top_k)
+
+        sort_indices = torch.argsort(top_k_indices_flat, stable=True)
+        sorted_token_indices = token_indices[sort_indices]
+        sorted_expert_indices = top_k_indices_flat[sort_indices]
+        sorted_weights = top_k_weights_flat[sort_indices]
+
         output = torch.zeros_like(x_flat)
 
-        for i in range(self.n_experts):
-            expert_mask = (top_k_indices == i).any(dim=-1)
-            if expert_mask.any():
-                expert_input = x_flat[expert_mask]
-                expert_output = self.experts[i](expert_input)
+        expert_boundaries = torch.where(
+            torch.cat([
+                torch.tensor([True], device=x.device),
+                sorted_expert_indices[1:] != sorted_expert_indices[:-1]
+            ])
+        )[0]
+        expert_boundaries = torch.cat([
+            expert_boundaries,
+            torch.tensor([len(sorted_expert_indices)], device=x.device)
+        ])
 
-                expert_weight_mask = top_k_indices == i
-                weights = top_k_weights[expert_weight_mask].unsqueeze(-1)
+        for i in range(len(expert_boundaries) - 1):
+            start_idx = expert_boundaries[i]
+            end_idx = expert_boundaries[i + 1]
+            
+            if start_idx >= end_idx:
+                continue
+                
+            expert_id = sorted_expert_indices[start_idx].item()
+            batch_tokens = sorted_token_indices[start_idx:end_idx]
+            batch_weights = sorted_weights[start_idx:end_idx]
 
-                output[expert_mask] += expert_output * weights
+            expert_input = x_flat[batch_tokens]
+            expert_output = self.experts[expert_id](expert_input)
+
+            output.index_add_(0, batch_tokens, expert_output * batch_weights.unsqueeze(-1))
 
         return output.view(B, T, C)
