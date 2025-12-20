@@ -8,35 +8,34 @@ clean:
     @find . -type d -name ".pytest_cache" -exec rm -rf {} +
 
 install:
-    @poetry lock
-    @poetry install
+    @uv sync --all-extras
 
 ci:
-    @poetry run ruff format .
-    @poetry run ruff check . --fix --unsafe-fixes
-    @poetry run pytest tests/ -q
+    @uv run ruff format .
+    @uv run ruff check . --fix --unsafe-fixes
+    @uv run pytest tests/ -q
 
 test:
-    @poetry run pytest tests/
+    @uv run pytest tests/
 
 cov:
-    @poetry run pytest --cov=src tests/
+    @uv run pytest --cov=src tests/
 
 format:
-    @poetry run ruff format .
+    @uv run ruff format .
 
 lint:
-    @poetry run ruff check .
+    @uv run ruff check .
 
 fix:
-    @poetry run ruff check . --fix --unsafe-fixes
+    @uv run ruff check . --fix --unsafe-fixes
 
 train-smoke:
     @echo "==> Smoke test: baseline"
-    poetry run python src/train.py experiments/baseline.yaml
+    uv run python src/train.py experiments/baseline.yaml
 
 compare:
-    poetry run python compare.py experiments/baseline.yaml experiments/modern.yaml
+    uv run python compare.py experiments/baseline.yaml experiments/modern.yaml
 
 commits:
     @git --no-pager log --pretty=format:"%h | %ar | %s"
