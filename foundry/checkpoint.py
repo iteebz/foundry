@@ -1,5 +1,7 @@
 """Checkpoint bridge for loading pretrained HuggingFace models into foundry."""
 
+from dataclasses import dataclass
+
 import torch
 
 
@@ -81,18 +83,30 @@ def validate_checkpoint(checkpoint: dict) -> None:
         raise ValueError("Checkpoint has empty model state dict")
 
 
-def load_checkpoint(model, optimizer, path: str) -> dict:
+@dataclass
+class ResumeState:
+    iter_num: int
+    best_val_loss: float
+    config: dict
+
+
+def load_checkpoint(model, optimizer, path: str, device: str = "cpu") -> ResumeState:
     """Load foundry checkpoint from disk.
 
     Returns:
-        dict: Checkpoint metadata (config, iter_num, etc.)
+        ResumeState with iter_num, best_val_loss, and config
 
     Raises:
-        ValueError: If checkpoint is corrupted
+        ValueError: If checkpoint is corrupted or missing required fields
     """
-    checkpoint = torch.load(path, map_location="cpu")
+    checkpoint = torch.load(path, map_location=device, weights_only=False)
 
     validate_checkpoint(checkpoint)
+
+    if "iter_num" not in checkpoint:
+        raise ValueError("Checkpoint missing iter_num - cannot resume")
+    if "best_val_loss" not in checkpoint:
+        raise ValueError("Checkpoint missing best_val_loss - cannot resume")
 
     state_dict = checkpoint["model"]
     unwanted_prefix = "_orig_mod."
@@ -105,4 +119,8 @@ def load_checkpoint(model, optimizer, path: str) -> dict:
     if optimizer is not None and "optimizer" in checkpoint:
         optimizer.load_state_dict(checkpoint["optimizer"])
 
-    return checkpoint.get("config", {})
+    return ResumeState(
+        iter_num=checkpoint["iter_num"],
+        best_val_loss=checkpoint["best_val_loss"],
+        config=checkpoint.get("config", {}),
+    )

@@ -136,6 +136,26 @@ def train(config_path: str | Path):
         device_type,
     )
 
+    iter_num = 0
+    best_val_loss = 1e9
+
+    if config.training.init_from == "resume":
+        from foundry.checkpoint import load_checkpoint
+
+        ckpt_path = out_dir / "ckpt.pt"
+        if not ckpt_path.exists():
+            raise FileNotFoundError(f"Cannot resume: {ckpt_path} not found")
+        resume_state = load_checkpoint(model, optimizer, str(ckpt_path), device=device)
+        iter_num = resume_state.iter_num
+        best_val_loss = resume_state.best_val_loss
+    elif config.training.init_from != "scratch":
+        from foundry.checkpoint import load_checkpoint
+
+        ckpt_path = Path(config.training.init_from)
+        if not ckpt_path.exists():
+            raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
+        load_checkpoint(model, None, str(ckpt_path), device=device)
+
     if config.training.compile:
         model = torch.compile(model, mode=config.training.compile_mode)
 
@@ -228,11 +248,7 @@ def train(config_path: str | Path):
         model.train()
         return out
 
-    iter_num = 0
-    best_val_loss = 1e9
     current_epoch = 0
-    time.time()
-
     train_iter = iter(train_loader)
     if train_sampler is not None:
         train_sampler.set_epoch(current_epoch)
