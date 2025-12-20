@@ -31,12 +31,14 @@ def run_eval_on_checkpoint(checkpoint_path: Path, eval_task: str) -> float:
         "-c",
         f"""import torch
 from foundry.benchmarks.harness import run_benchmark_suite
+from foundry.config import RunConfig
 from foundry.model import GPT
 from foundry.data.tokenize import BPETokenizer
 from pathlib import Path
 
 checkpoint = torch.load('{checkpoint_path}', weights_only=False)
-model = GPT(checkpoint['config'])
+config = RunConfig.from_dict(checkpoint['config'])
+model = GPT(config.model)
 model.load_state_dict(checkpoint['model'])
 
 meta_path = Path('{checkpoint_path}').parent / 'meta.pkl'
