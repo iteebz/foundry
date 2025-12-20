@@ -145,6 +145,32 @@ class RunConfig:
         config.validate()
         return config.freeze()
 
+    @classmethod
+    def from_dict(cls, raw: dict) -> "RunConfig":
+        """Load configuration from dictionary (e.g., checkpoint)."""
+        model_config = GPTConfig(**raw.get("model_args", {}))
+
+        training_config = TrainingConfig(**raw.get("training", {}))
+
+        data_args = raw.get("data", {})
+        sources_raw = data_args.pop("sources", [])
+        sources = [DataSource(**s) for s in sources_raw] if sources_raw else []
+        data_config = DataConfig(**data_args, sources=sources)
+
+        lora_config = LoRAConfig(**raw.get("lora", {}))
+        wandb_config = WandbConfig(**raw.get("wandb", {}))
+
+        return cls(
+            name=raw.get("name", "unknown"),
+            run_id=raw.get("run_id", uuid.uuid4().hex[:8]),
+            model=model_config,
+            data=data_config,
+            training=training_config,
+            lora=lora_config,
+            wandb=wandb_config,
+            metadata=raw.get("_metadata", {}),
+        )
+
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
         return {
@@ -171,24 +197,54 @@ class RunConfig:
                 "sliding_window_size": self.model.sliding_window_size,
                 "sparse_block_size": self.model.sparse_block_size,
                 "sparse_stride": self.model.sparse_stride,
+                "gradient_checkpointing": self.model.gradient_checkpointing,
             },
             "training": {
+                "out_dir": self.training.out_dir,
                 "seed": self.training.seed,
-                "max_iters": self.training.max_iters,
+                "eval_interval": self.training.eval_interval,
+                "log_interval": self.training.log_interval,
+                "eval_iters": self.training.eval_iters,
+                "eval_only": self.training.eval_only,
+                "always_save_checkpoint": self.training.always_save_checkpoint,
+                "init_from": self.training.init_from,
+                "gradient_accumulation_steps": self.training.gradient_accumulation_steps,
                 "learning_rate": self.training.learning_rate,
+                "max_iters": self.training.max_iters,
                 "weight_decay": self.training.weight_decay,
                 "beta1": self.training.beta1,
                 "beta2": self.training.beta2,
                 "grad_clip": self.training.grad_clip,
+                "use_ema": self.training.use_ema,
+                "ema_decay": self.training.ema_decay,
+                "decay_lr": self.training.decay_lr,
                 "warmup_iters": self.training.warmup_iters,
                 "lr_decay_iters": self.training.lr_decay_iters,
                 "min_lr": self.training.min_lr,
+                "device": self.training.device,
+                "dtype": self.training.dtype,
+                "compile": self.training.compile,
+                "compile_mode": self.training.compile_mode,
                 "gradient_checkpointing": self.training.gradient_checkpointing,
+                "distributed": self.training.distributed,
+                "fsdp_min_params": self.training.fsdp_min_params,
             },
             "data": {
                 "dataset": self.data.dataset,
                 "batch_size": self.data.batch_size,
                 "block_size": self.data.block_size,
+                "sources": [{"path": s.path, "weight": s.weight} for s in self.data.sources],
+            },
+            "lora": {
+                "enabled": self.lora.enabled,
+                "r": self.lora.r,
+                "lora_alpha": self.lora.lora_alpha,
+                "lora_dropout": self.lora.lora_dropout,
+            },
+            "wandb": {
+                "enabled": self.wandb.enabled,
+                "project": self.wandb.project,
+                "run_name": self.wandb.run_name,
             },
             "_metadata": self.metadata,
         }
