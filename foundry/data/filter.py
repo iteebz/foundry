@@ -327,7 +327,7 @@ class MinHashDedupFilter(Filter):
         self.ngram_size = ngram_size
 
     def _stable_hash(self, shingle: str, seed: int) -> int:
-        data = f"{seed}:{shingle}".encode("utf-8")
+        data = f"{seed}:{shingle}".encode()
         digest = hashlib.blake2b(data, digest_size=8).digest()
         return int.from_bytes(digest, "little")
 
