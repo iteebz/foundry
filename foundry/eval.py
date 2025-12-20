@@ -4,12 +4,12 @@ import numpy as np
 import torch
 
 
-def evaluate(model, get_batch, max_iters=100, device="cuda", ctx=None):
+def evaluate(model, batch_iter, max_iters=100, device="cuda", ctx=None):
     """Evaluate model on validation set.
 
     Args:
         model: Model to evaluate
-        get_batch: Function(split) -> (X, Y) tensors
+        batch_iter: Iterable yielding (X, Y) tensor pairs
         max_iters: Number of batches to evaluate
         device: Device to run on
         ctx: Context manager for autocast
@@ -24,13 +24,14 @@ def evaluate(model, get_batch, max_iters=100, device="cuda", ctx=None):
     losses = []
 
     with torch.no_grad():
-        for _ in range(max_iters):
-            X, Y = get_batch("val")
+        for i, (X, Y) in enumerate(batch_iter):
+            if i >= max_iters:
+                break
             with ctx:
                 _, loss = model(X, Y)
             losses.append(loss.item())
 
     model.train()
 
-    mean_loss = np.mean(losses)
+    mean_loss = np.mean(losses) if losses else float("inf")
     return {"loss": mean_loss, "perplexity": np.exp(mean_loss)}

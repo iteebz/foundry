@@ -359,15 +359,12 @@ def train(config_path: str | Path):
             break
 
     if master_process:
-
-        def batch_fn(split):
-            loader = train_loader if split == "train" else val_loader
-            for X, Y in loader:
-                yield X.to(device), Y.to(device)
-
+        val_iter = (
+            (X.to(device), Y.to(device)) for X, Y in val_loader
+        )
         evaluate(
             raw_model,
-            batch_fn,
+            val_iter,
             max_iters=config.training.eval_iters,
             device=device,
             ctx=ctx,
