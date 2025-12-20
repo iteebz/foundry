@@ -110,3 +110,22 @@ def test_mixed_precision_no_nan():
         optimizer.zero_grad(set_to_none=True)
 
         assert not torch.isnan(loss), f"NaN loss at step {step}"
+
+
+def test_gradient_noise_scale_formula():
+    """GNS = n * Σ||gᵢ||² / ||Σgᵢ||² - 1. Zero when identical, positive with variance."""
+    n = 3
+    g = torch.tensor([1.0, 2.0, 3.0])
+    sum_sq_norms = g.pow(2).sum() * n
+    acc_norm_sq = (g * n).pow(2).sum()
+    gns_identical = (sum_sq_norms * n) / acc_norm_sq - 1
+    assert torch.allclose(gns_identical, torch.tensor(0.0), atol=1e-6)
+
+    g1 = torch.tensor([1.0, 0.0, 0.0])
+    g2 = torch.tensor([0.0, 1.0, 0.0])
+    g3 = torch.tensor([0.0, 0.0, 1.0])
+    sum_sq_norms = g1.pow(2).sum() + g2.pow(2).sum() + g3.pow(2).sum()
+    g_acc = g1 + g2 + g3
+    acc_norm_sq = g_acc.pow(2).sum()
+    gns_orthogonal = (sum_sq_norms * n) / acc_norm_sq - 1
+    assert gns_orthogonal > 0, "Orthogonal gradients should have positive GNS"

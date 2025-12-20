@@ -249,6 +249,7 @@ def train(config_path: str | Path):
         return out
 
     current_epoch = 0
+    last_gns = None
     train_iter = iter(train_loader)
     if train_sampler is not None:
         train_sampler.set_epoch(current_epoch)
@@ -271,15 +272,18 @@ def train(config_path: str | Path):
         if iter_num % config.training.eval_interval == 0 and master_process:
             losses = estimate_loss()
 
+            metrics = {
+                "iter": iter_num,
+                "train_loss": float(losses["train"]),
+                "val_loss": float(losses["val"]),
+                "lr": lr,
+                "batch_size": config.data.batch_size * effective_grad_accum * world_size,
+            }
+            if last_gns is not None:
+                metrics["gns"] = last_gns
+
             if metric_logger:
-                metric_logger.log(
-                    {
-                        "iter": iter_num,
-                        "train_loss": float(losses["train"]),
-                        "val_loss": float(losses["val"]),
-                        "lr": lr,
-                    }
-                )
+                metric_logger.log(metrics)
 
             if config.wandb.enabled:
                 import wandb
@@ -290,6 +294,8 @@ def train(config_path: str | Path):
                         "train/loss": losses["train"],
                         "val/loss": losses["val"],
                         "lr": lr,
+                        "batch_size": config.data.batch_size * effective_grad_accum * world_size,
+                        **(({"train/gns": last_gns}) if last_gns is not None else {}),
                     }
                 )
 
@@ -313,6 +319,8 @@ def train(config_path: str | Path):
         if iter_num == 0 and config.training.eval_only:
             break
 
+        sum_sq_grad_norms = 0.0
+        prev_grads = None
         for micro_step in range(effective_grad_accum):
             if is_ddp:
                 model.require_backward_grad_sync = micro_step == effective_grad_accum - 1
@@ -324,6 +332,29 @@ def train(config_path: str | Path):
                 raise RuntimeError(f"Non-finite loss at iter {iter_num}: {loss.item()}")
 
             scaler.scale(loss).backward()
+
+            if config.training.log_gns and effective_grad_accum > 1:
+                with torch.no_grad():
+                    scale = scaler.get_scale() if dtype == "float16" else 1.0
+                    if prev_grads is None:
+                        prev_grads = []
+                        for p in model.parameters():
+                            if p.grad is None:
+                                prev_grads.append(None)
+                                continue
+                            grad = p.grad.detach()
+                            prev_grads.append(grad.clone())
+                            sum_sq_grad_norms += (grad.float() / scale).pow(2).sum().item()
+                    else:
+                        for idx, p in enumerate(model.parameters()):
+                            if p.grad is None:
+                                prev_grads[idx] = None
+                                continue
+                            grad = p.grad.detach()
+                            prev = prev_grads[idx]
+                            delta = grad if prev is None else grad - prev
+                            prev_grads[idx] = grad.clone()
+                            sum_sq_grad_norms += (delta.float() / scale).pow(2).sum().item()
 
             if micro_step < effective_grad_accum - 1:
                 try:
@@ -339,6 +370,18 @@ def train(config_path: str | Path):
         if config.training.grad_clip != 0.0:
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), config.training.grad_clip)
+
+        if config.training.log_gns and effective_grad_accum > 1:
+            with torch.no_grad():
+                scale = scaler.get_scale() if dtype == "float16" else 1.0
+                acc_scale = 1.0 if config.training.grad_clip != 0.0 else scale
+                acc_norm_sq = sum(
+                    (p.grad.float() / acc_scale).pow(2).sum()
+                    for p in model.parameters()
+                    if p.grad is not None
+                ).item()
+                n = effective_grad_accum
+                last_gns = (sum_sq_grad_norms * n) / max(acc_norm_sq, 1e-8) - 1
 
         scaler.step(optimizer)
         scaler.update()
