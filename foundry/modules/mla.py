@@ -64,4 +64,6 @@ class MultiLatentAttention(nn.Module):
         y = att @ v
         y = y.transpose(1, 2).contiguous().view(B, T, C)
 
-        return self.resid_dropout(self.c_proj(y))
+        result = self.resid_dropout(self.c_proj(y))
+        assert result.shape == x.shape, f"MLA shape contract violated: {result.shape} != {x.shape}"
+        return result

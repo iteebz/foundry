@@ -66,12 +66,14 @@ def train(config_path: str | Path):
         assert effective_grad_accum % world_size == 0
         effective_grad_accum //= world_size
 
+    out_dir = Path(config.training.out_dir) / config.run_id
     if master_process:
-        Path(config.training.out_dir).mkdir(parents=True, exist_ok=True)
+        out_dir.mkdir(parents=True, exist_ok=True)
 
-    metric_logger = MetricLogger(config.training.out_dir) if master_process else None
+    metric_logger = MetricLogger(str(out_dir)) if master_process else None
 
-    torch.manual_seed(1337 + rank)
+    seed = config.training.seed
+    torch.manual_seed(seed + rank)
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
 
@@ -186,8 +188,8 @@ def train(config_path: str | Path):
         ]
         weights = [src.weight for src in config.data.sources]
 
-        train_dataset = MixtureDataset(train_datasets, weights, seed=1337)
-        val_dataset = MixtureDataset(val_datasets, weights, seed=1337)
+        train_dataset = MixtureDataset(train_datasets, weights, seed=seed)
+        val_dataset = MixtureDataset(val_datasets, weights, seed=seed)
 
         if master_process:
             for _i, _src in enumerate(config.data.sources):
@@ -237,21 +239,24 @@ def train(config_path: str | Path):
 
     iter_num = 0
     best_val_loss = 1e9
+    current_epoch = 0
+    len(train_loader) * config.data.batch_size
     t0 = time.time()
 
-    (effective_grad_accum * world_size * config.data.batch_size * config.data.block_size)
     if master_process:
         pass
 
     train_iter = iter(train_loader)
+    if train_sampler is not None:
+        train_sampler.set_epoch(current_epoch)
 
     while True:
-        if train_sampler is not None:
-            train_sampler.set_epoch(iter_num)
-
         try:
             X, Y = next(train_iter)
         except StopIteration:
+            current_epoch += 1
+            if train_sampler is not None:
+                train_sampler.set_epoch(current_epoch)
             train_iter = iter(train_loader)
             X, Y = next(train_iter)
 
@@ -297,7 +302,10 @@ def train(config_path: str | Path):
                     }
                     if ema_model:
                         checkpoint["ema"] = ema_model.shadow
-                    torch.save(checkpoint, Path(config.training.out_dir) / "ckpt.pt")
+                    ckpt_path = out_dir / "ckpt.pt"
+                    tmp_path = ckpt_path.with_suffix(".tmp")
+                    torch.save(checkpoint, tmp_path)
+                    tmp_path.replace(ckpt_path)
                     if master_process:
                         pass
 
@@ -310,12 +318,19 @@ def train(config_path: str | Path):
             with ctx:
                 _logits, loss = model(X, Y)
                 loss = loss / effective_grad_accum
+
+            if not torch.isfinite(loss):
+                raise RuntimeError(f"Non-finite loss at iter {iter_num}: {loss.item()}")
+
             scaler.scale(loss).backward()
 
             if micro_step < effective_grad_accum - 1:
                 try:
                     X, Y = next(train_iter)
                 except StopIteration:
+                    current_epoch += 1
+                    if train_sampler is not None:
+                        train_sampler.set_epoch(current_epoch)
                     train_iter = iter(train_loader)
                     X, Y = next(train_iter)
                 X, Y = X.to(device), Y.to(device)

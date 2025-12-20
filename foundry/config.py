@@ -1,7 +1,9 @@
 """Unified configuration for training runs."""
 
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -25,6 +27,7 @@ class DataConfig:
 @dataclass
 class TrainingConfig:
     out_dir: str = "out"
+    seed: int | None = None
     eval_interval: int = 500
     log_interval: int = 1
     eval_iters: int = 200
@@ -68,15 +71,36 @@ class WandbConfig:
     run_name: str = "run"
 
 
+class ConfigFrozenError(Exception):
+    """Raised when attempting to modify a frozen config."""
+
+
 @dataclass
 class RunConfig:
     name: str
     model: GPTConfig
+    run_id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     data: DataConfig = field(default_factory=DataConfig)
     training: TrainingConfig = field(default_factory=TrainingConfig)
     lora: LoRAConfig = field(default_factory=LoRAConfig)
     wandb: WandbConfig = field(default_factory=WandbConfig)
     metadata: dict = field(default_factory=dict)
+    _frozen: bool = field(default=False, repr=False)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if getattr(self, "_frozen", False) and name != "_frozen":
+            raise ConfigFrozenError(f"Cannot modify frozen config: {name}")
+        super().__setattr__(name, value)
+
+    def freeze(self) -> "RunConfig":
+        """Freeze config to prevent further modifications."""
+        object.__setattr__(self, "_frozen", True)
+        return self
+
+    def validate(self) -> None:
+        """Validate config before freezing. Raises ValueError on invalid config."""
+        if self.training.seed is None:
+            raise ValueError("training.seed must be explicitly set for reproducibility")
 
     @classmethod
     def from_yaml(cls, path: Path) -> "RunConfig":
@@ -106,8 +130,11 @@ class RunConfig:
 
         metadata = raw.get("_metadata", {})
 
-        return cls(
+        run_id = raw.get("run_id", uuid.uuid4().hex[:8])
+
+        config = cls(
             name=name,
+            run_id=run_id,
             model=model_config,
             data=data_config,
             training=training_config,
@@ -115,11 +142,14 @@ class RunConfig:
             wandb=wandb_config,
             metadata=metadata,
         )
+        config.validate()
+        return config.freeze()
 
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
         return {
             "name": self.name,
+            "run_id": self.run_id,
             "model_args": {
                 "block_size": self.model.block_size,
                 "vocab_size": self.model.vocab_size,
@@ -143,6 +173,7 @@ class RunConfig:
                 "sparse_stride": self.model.sparse_stride,
             },
             "training": {
+                "seed": self.training.seed,
                 "max_iters": self.training.max_iters,
                 "learning_rate": self.training.learning_rate,
                 "weight_decay": self.training.weight_decay,

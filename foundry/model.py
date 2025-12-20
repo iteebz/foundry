@@ -198,6 +198,17 @@ class GPTConfig:
         if self.n_kv_head > self.n_head:
             raise ValueError(f"n_kv_head ({self.n_kv_head}) cannot exceed n_head ({self.n_head})")
 
+        if self.n_head % self.n_kv_head != 0:
+            raise ValueError(
+                f"n_head ({self.n_head}) must be divisible by n_kv_head ({self.n_kv_head})"
+            )
+
+        head_dim = self.n_embd // self.n_head
+        if self.position_encoding == "rope" and head_dim % 2 != 0:
+            raise ValueError(
+                f"RoPE requires even head_dim, got {head_dim} (n_embd={self.n_embd}, n_head={self.n_head})"
+            )
+
         if self.attention_type == "mla" and self.mla_latent_dim is None:
             raise ValueError("mla_latent_dim required when attention_type='mla'")
 

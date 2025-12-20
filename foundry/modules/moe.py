@@ -91,4 +91,6 @@ class MoELayer(nn.Module):
 
             output.index_add_(0, batch_tokens, expert_output * batch_weights.unsqueeze(-1))
 
-        return output.view(B, T, C)
+        result = output.view(B, T, C)
+        assert result.shape == x.shape, f"MoE shape contract violated: {result.shape} != {x.shape}"
+        return result

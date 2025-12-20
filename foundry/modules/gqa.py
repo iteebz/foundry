@@ -54,4 +54,6 @@ class GroupedQueryAttention(nn.Module):
             dropout_p=self.attn_dropout.p if self.training else 0.0,
         )
         y = y.transpose(1, 2).contiguous().view(B, T, C)
-        return self.resid_dropout(self.o_proj(y))
+        result = self.resid_dropout(self.o_proj(y))
+        assert result.shape == x.shape, f"GQA shape contract violated: {result.shape} != {x.shape}"
+        return result
