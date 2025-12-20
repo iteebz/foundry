@@ -98,7 +98,7 @@ def train_mutation(experiment_path: Path, eval_task: str | None = None) -> dict:
             "error": result.stderr,
         }
 
-    out_dir = Path("out")
+    out_dir = Path("out") / experiment_path.stem
     logger = MetricLogger(str(out_dir))
     final_metrics = logger.get_final_metrics()
 

@@ -66,7 +66,7 @@ def train(config_path: str | Path):
         assert effective_grad_accum % world_size == 0
         effective_grad_accum //= world_size
 
-    out_dir = Path(config.training.out_dir) / config.run_id
+    out_dir = Path(config.training.out_dir) / config.name
     if master_process:
         out_dir.mkdir(parents=True, exist_ok=True)
 
