@@ -12,7 +12,7 @@ class GroupedQueryAttention(nn.Module):
         self,
         n_embd: int,
         n_head: int,
-        n_kv_head: int = None,
+        n_kv_head: int | None = None,
         bias: bool = True,
         dropout: float = 0.0,
     ):

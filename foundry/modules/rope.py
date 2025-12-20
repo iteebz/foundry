@@ -28,7 +28,7 @@ class RotaryEmbedding(nn.Module):
             self._cos_cached = emb.cos().to(dtype)
             self._sin_cached = emb.sin().to(dtype)
 
-    def forward(self, x: torch.Tensor, seq_len: int = None):
+    def forward(self, x: torch.Tensor, seq_len: int | None = None):
         if seq_len is None:
             seq_len = x.shape[-2]
         self._update_cache(seq_len, x.device, x.dtype)

@@ -56,10 +56,10 @@ else:
     ]
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)  # noqa: S603 - cmd is internal python
         if result.returncode == 0 and result.stdout.strip():
             return float(result.stdout.strip())
-    except Exception:
+    except Exception:  # noqa: S110 - eval failures return 0.0
         pass
 
     return 0.0
@@ -73,7 +73,7 @@ def generate_mutation(mutation_type: str, variant: str) -> Path:
     else:
         cmd = [sys.executable, "-m", "foundry.mutate", mutation_type, variant]
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True)  # noqa: S603 - cmd is internal python module
     if result.returncode != 0:
         raise RuntimeError(f"Failed to generate {mutation_type} {variant}: {result.stderr}")
 
@@ -89,7 +89,7 @@ def train_mutation(experiment_path: Path, eval_task: str | None = None) -> dict:
     from foundry.metrics import MetricLogger
 
     cmd = [sys.executable, "-m", "foundry.train", str(experiment_path)]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True)  # noqa: S603 - cmd is internal python module
 
     if result.returncode != 0:
         return {

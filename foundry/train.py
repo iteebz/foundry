@@ -1,7 +1,6 @@
 """Training script with RunConfig (v2 - clean refactor)."""
 
 import math
-import os
 import pickle
 import sys
 import time
@@ -68,8 +67,7 @@ def train(config_path: str | Path):
         effective_grad_accum //= world_size
 
     if master_process:
-        os.makedirs(config.training.out_dir, exist_ok=True)
-        print(f"Training config: {config.name}")
+        Path(config.training.out_dir).mkdir(parents=True, exist_ok=True)
 
     metric_logger = MetricLogger(config.training.out_dir) if master_process else None
 
@@ -105,15 +103,15 @@ def train(config_path: str | Path):
         else torch.amp.autocast(device_type=device_type, dtype=ptdtype)
     )
 
-    data_dir = os.path.join("data", config.data.dataset)
+    data_dir = Path("data") / config.data.dataset
 
-    meta_path = os.path.join(data_dir, "meta.pkl")
-    if os.path.exists(meta_path):
-        with open(meta_path, "rb") as f:
-            meta = pickle.load(f)
+    meta_path = data_dir / "meta.pkl"
+    if meta_path.exists():
+        with meta_path.open("rb") as f:
+            meta = pickle.load(f)  # noqa: S301 - trusted internal checkpoint
         config.model.vocab_size = meta["vocab_size"]
         if master_process:
-            print(f"vocab_size = {config.model.vocab_size}")
+            pass
     elif config.model.vocab_size is None:
         config.model.vocab_size = 50304
 
@@ -130,8 +128,7 @@ def train(config_path: str | Path):
             lora_dropout=config.lora.lora_dropout,
         )
         if master_process:
-            stats = get_lora_params(model)
-            print(f"LoRA: r={config.lora.r}, trainable={stats['trainable_pct']:.2f}%")
+            get_lora_params(model)
 
     scaler = torch.cuda.amp.GradScaler(enabled=(dtype == "float16"))
     optimizer = model.configure_optimizers(
@@ -143,7 +140,7 @@ def train(config_path: str | Path):
 
     if config.training.compile:
         if master_process:
-            print(f"Compiling model (mode={config.training.compile_mode})...")
+            pass
         model = torch.compile(model, mode=config.training.compile_mode)
 
     model, is_ddp, is_fsdp = wrap_model_distributed(
@@ -193,16 +190,11 @@ def train(config_path: str | Path):
         val_dataset = MixtureDataset(val_datasets, weights, seed=1337)
 
         if master_process:
-            print(f"Mixture dataset: {len(config.data.sources)} sources")
-            for i, src in enumerate(config.data.sources):
-                print(f"  [{i}] {src.path} (weight={src.weight:.2f})")
+            for _i, _src in enumerate(config.data.sources):
+                pass
     else:
-        train_dataset = TokenDataset(
-            os.path.join(data_dir, "train.bin"), block_size=config.data.block_size
-        )
-        val_dataset = TokenDataset(
-            os.path.join(data_dir, "val.bin"), block_size=config.data.block_size
-        )
+        train_dataset = TokenDataset(data_dir / "train.bin", block_size=config.data.block_size)
+        val_dataset = TokenDataset(data_dir / "val.bin", block_size=config.data.block_size)
 
     train_sampler = DistributedSampler(train_dataset, shuffle=True) if world_size > 1 else None
     val_sampler = DistributedSampler(val_dataset, shuffle=False) if world_size > 1 else None
@@ -237,7 +229,7 @@ def train(config_path: str | Path):
                     break
                 X, Y = X.to(device), Y.to(device)
                 with ctx:
-                    logits, loss = model(X, Y)
+                    _logits, loss = model(X, Y)
                 losses.append(loss.item())
             out[split] = np.mean(losses)
         model.train()
@@ -247,11 +239,9 @@ def train(config_path: str | Path):
     best_val_loss = 1e9
     t0 = time.time()
 
-    tokens_per_iter = (
-        effective_grad_accum * world_size * config.data.batch_size * config.data.block_size
-    )
+    (effective_grad_accum * world_size * config.data.batch_size * config.data.block_size)
     if master_process:
-        print(f"Tokens per iteration: {tokens_per_iter:,}")
+        pass
 
     train_iter = iter(train_loader)
 
@@ -272,7 +262,6 @@ def train(config_path: str | Path):
 
         if iter_num % config.training.eval_interval == 0 and master_process:
             losses = estimate_loss()
-            print(f"step {iter_num}: train={losses['train']:.4f}, val={losses['val']:.4f}")
 
             if metric_logger:
                 metric_logger.log(
@@ -308,9 +297,9 @@ def train(config_path: str | Path):
                     }
                     if ema_model:
                         checkpoint["ema"] = ema_model.shadow
-                    torch.save(checkpoint, os.path.join(config.training.out_dir, "ckpt.pt"))
+                    torch.save(checkpoint, Path(config.training.out_dir) / "ckpt.pt")
                     if master_process:
-                        print(f"Saved checkpoint (val_loss={best_val_loss:.4f})")
+                        pass
 
         if iter_num == 0 and config.training.eval_only:
             break
@@ -319,7 +308,7 @@ def train(config_path: str | Path):
             if is_ddp:
                 model.require_backward_grad_sync = micro_step == effective_grad_accum - 1
             with ctx:
-                logits, loss = model(X, Y)
+                _logits, loss = model(X, Y)
                 loss = loss / effective_grad_accum
             scaler.scale(loss).backward()
 
@@ -343,12 +332,11 @@ def train(config_path: str | Path):
             ema_model.update(raw_model)
 
         t1 = time.time()
-        dt = t1 - t0
+        t1 - t0
         t0 = t1
 
         if iter_num % config.training.log_interval == 0 and master_process:
-            lossf = loss.item() * config.training.gradient_accumulation_steps
-            print(f"iter {iter_num}: loss {lossf:.4f}, time {dt * 1000:.2f}ms")
+            loss.item() * config.training.gradient_accumulation_steps
 
         iter_num += 1
 
@@ -362,21 +350,19 @@ def train(config_path: str | Path):
             for X, Y in loader:
                 yield X.to(device), Y.to(device)
 
-        results = evaluate(
+        evaluate(
             raw_model,
             batch_fn,
             max_iters=config.training.eval_iters,
             device=device,
             ctx=ctx,
         )
-        print(f"\nFinal: loss={results['loss']:.4f}, perplexity={results['perplexity']:.2f}")
 
     cleanup_distributed()
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python -m foundry.train_v2 <config.yaml>")
         sys.exit(1)
 
     train(sys.argv[1])

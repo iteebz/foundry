@@ -3,7 +3,7 @@
 import torch
 
 
-def load_hf_checkpoint(model, hf_model_name: str, cache_dir: str = None) -> None:
+def load_hf_checkpoint(model, hf_model_name: str, cache_dir: str | None = None) -> None:
     """Load HuggingFace checkpoint weights into foundry model.
 
     Supports GPT-2 family models. Maps HF state dict to foundry architecture.

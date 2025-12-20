@@ -74,5 +74,5 @@ def save_eval_results(results: dict[str, Any], output_path: str | Path) -> None:
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(output_path, "w") as f:
+    with output_path.open("w") as f:
         json.dump(results, f, indent=2)

@@ -72,7 +72,7 @@ Instruction:"""
                     instruction = parts[0].replace("Instruction:", "").strip()
                     response = parts[1].strip()
                     generated.append({"instruction": instruction, "response": response})
-            except Exception:
+            except Exception:  # noqa: S112 - skip malformed generations
                 continue
 
     return generated
@@ -125,7 +125,7 @@ def evol_instruct(
         for _ in range(num_iterations):
             new_evolved = []
             for task in random.sample(evolved, min(len(evolved), 100)):
-                evo_type = random.choice(evolution_types)
+                evo_type = random.choice(evolution_types)  # noqa: S311 - not crypto
                 prompt = evolution_prompts[evo_type].format(instruction=task["instruction"])
 
                 input_ids = torch.tensor([tokenizer.encode(prompt)]).to(device)
@@ -181,7 +181,7 @@ Problem:"""
 
     with torch.no_grad():
         for _ in range(num_problems):
-            topic = random.choice(topics)
+            topic = random.choice(topics)  # noqa: S311 - not crypto
             prompt = prompt_template.format(difficulty=difficulty_prompts[difficulty], topic=topic)
 
             input_ids = torch.tensor([tokenizer.encode(prompt)]).to(device)
@@ -198,7 +198,7 @@ Problem:"""
                     answer = solution_answer[1].strip()
 
                     problems.append({"problem": problem, "solution": solution, "answer": answer})
-            except Exception:
+            except Exception:  # noqa: S112 - skip malformed generations
                 continue
 
     return problems
@@ -207,6 +207,5 @@ Problem:"""
 def save_synthetic_dataset(data: list[dict], output_path: Path):
     """Save synthetic data to JSONL."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w") as f:
-        for item in data:
-            f.write(json.dumps(item) + "\n")
+    with output_path.open("w") as f:
+        f.writelines(json.dumps(item) + "\n" for item in data)

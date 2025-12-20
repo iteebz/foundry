@@ -23,7 +23,7 @@ def run_experiment(experiment_path: str, out_dir: str) -> dict:
     typer.echo(f"Config: {experiment_path}")
     typer.echo(f"{'=' * 60}\n")
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True)  # noqa: S603 - cmd is internal python module
 
     if result.returncode != 0:
         typer.echo(f"❌ Experiment failed: {experiment_name}")

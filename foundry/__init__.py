@@ -4,4 +4,4 @@ from foundry.checkpoint import load_checkpoint, load_hf_checkpoint, save_checkpo
 from foundry.model import GPT, GPTConfig
 
 __version__ = "0.1.0"
-__all__ = ["GPT", "GPTConfig", "load_checkpoint", "save_checkpoint", "load_hf_checkpoint"]
+__all__ = ["GPT", "GPTConfig", "load_checkpoint", "load_hf_checkpoint", "save_checkpoint"]

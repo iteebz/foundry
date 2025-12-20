@@ -35,7 +35,7 @@ def evaluate_gsm8k(
     if not dataset_path.exists():
         return {"error": f"Dataset not found: {dataset_path}", "accuracy": 0.0}
 
-    with open(dataset_path) as f:
+    with dataset_path.open() as f:
         data = [json.loads(line) for line in f]
 
     if max_samples:
@@ -74,7 +74,7 @@ def evaluate_mmlu(
     if not dataset_path.exists():
         return {"error": f"Dataset not found: {dataset_path}", "accuracy": 0.0}
 
-    with open(dataset_path) as f:
+    with dataset_path.open() as f:
         data = [json.loads(line) for line in f]
 
     if max_samples:
@@ -118,7 +118,7 @@ def evaluate_humaneval(
     if not dataset_path.exists():
         return {"error": f"Dataset not found: {dataset_path}", "pass_at_1": 0.0}
 
-    with open(dataset_path) as f:
+    with dataset_path.open() as f:
         data = [json.loads(line) for line in f]
 
     if max_samples:
@@ -144,11 +144,11 @@ def evaluate_humaneval(
 
         try:
             exec_globals = {}
-            exec(code, exec_globals)
+            exec(code, exec_globals)  # noqa: S102 - benchmark requires code execution
             if entry_point and entry_point in exec_globals:
-                exec(test, exec_globals)
+                exec(test, exec_globals)  # noqa: S102 - benchmark requires code execution
                 passed += 1
-        except Exception:
+        except Exception:  # noqa: S110 - benchmark silently skips failed tests
             pass
 
         total += 1

@@ -1,3 +1,4 @@
+import itertools
 import pickle
 from pathlib import Path
 
@@ -19,7 +20,7 @@ class BPETokenizer:
     def _get_stats(self, ids: list[int]) -> dict[tuple[int, int], int]:
         """Count frequency of adjacent pairs."""
         counts: dict[tuple[int, int], int] = {}
-        for pair in zip(ids, ids[1:], strict=False):
+        for pair in itertools.pairwise(ids):
             counts[pair] = counts.get(pair, 0) + 1
         return counts
 
@@ -86,14 +87,14 @@ class BPETokenizer:
             "merges": self.merges,
             "vocab": self.vocab,
         }
-        with open(path, "wb") as f:
+        with path.open("wb") as f:
             pickle.dump(meta, f)
 
     @classmethod
     def load(cls, path: Path) -> "BPETokenizer":
         """Load tokenizer from disk."""
-        with open(path, "rb") as f:
-            meta = pickle.load(f)
+        with path.open("rb") as f:
+            meta = pickle.load(f)  # noqa: S301 - trusted internal tokenizer file
         tok = cls(vocab_size=meta["vocab_size"])
         tok.merges = meta["merges"]
         tok.vocab = meta["vocab"]

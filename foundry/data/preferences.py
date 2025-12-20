@@ -210,7 +210,7 @@ Revised response following the critique:"""
             output = model.generate(input_ids, max_new_tokens=max_new_tokens)
             original_response = tokenizer.decode(output[0].tolist())
 
-            principle = random.choice(constitution_principles)
+            principle = random.choice(constitution_principles)  # noqa: S311 - not crypto
 
             critique_prompt = critique_template.format(
                 response=original_response, principle=principle
@@ -240,17 +240,17 @@ def save_preference_dataset(pairs: list[PreferencePair], output_path: str):
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
-    with open(output_path, "w") as f:
-        for pair in pairs:
-            f.write(
-                json.dumps(
-                    {
-                        "prompt": pair.prompt,
-                        "chosen": pair.chosen,
-                        "rejected": pair.rejected,
-                        "chosen_score": pair.chosen_score,
-                        "rejected_score": pair.rejected_score,
-                    }
-                )
-                + "\n"
+    with Path(output_path).open("w") as f:
+        f.writelines(
+            json.dumps(
+                {
+                    "prompt": pair.prompt,
+                    "chosen": pair.chosen,
+                    "rejected": pair.rejected,
+                    "chosen_score": pair.chosen_score,
+                    "rejected_score": pair.rejected_score,
+                }
             )
+            + "\n"
+            for pair in pairs
+        )

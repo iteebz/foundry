@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Sample from a trained model checkpoint."""
 
-import os
 import pickle
+from pathlib import Path
 from typing import Annotated
 
 import torch
@@ -40,10 +40,10 @@ def load_checkpoint(ckpt_path: str, device: str = "cpu"):
     return model, model_args
 
 
-def load_meta(meta_path: str):
+def load_meta(meta_path: Path):
     """Load tokenizer metadata."""
-    with open(meta_path, "rb") as f:
-        meta = pickle.load(f)
+    with meta_path.open("rb") as f:
+        meta = pickle.load(f)  # noqa: S301 - trusted internal tokenizer
     return meta["stoi"], meta["itos"]
 
 
@@ -67,11 +67,11 @@ def generate(
         else "cpu"
     )
 
-    model, model_args = load_checkpoint(ckpt, device)
+    model, _model_args = load_checkpoint(ckpt, device)
 
-    checkpoint_dir = os.path.dirname(ckpt)
-    meta_path = os.path.join(checkpoint_dir, "meta.pkl")
-    if not os.path.exists(meta_path):
+    checkpoint_dir = Path(ckpt).parent
+    meta_path = checkpoint_dir / "meta.pkl"
+    if not meta_path.exists():
         raise FileNotFoundError(f"meta.pkl not found at {meta_path}")
 
     stoi, itos = load_meta(meta_path)

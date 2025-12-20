@@ -28,7 +28,7 @@ def load_baseline() -> dict[str, Any]:
     if not baseline_path.exists():
         raise FileNotFoundError(f"Baseline not found: {baseline_path}")
 
-    with open(baseline_path) as f:
+    with baseline_path.open() as f:
         return yaml.safe_load(f)
 
 
@@ -44,7 +44,7 @@ def save_mutation(
     output_path = Path(output_dir) / f"{config['name']}.yaml"
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(output_path, "w") as f:
+    with output_path.open("w") as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=False)
 
     return output_path
@@ -127,6 +127,5 @@ def generate_sweep(
 
         path = save_mutation(config, output_dir, metadata)
         paths.append(path)
-        print(f"Generated: {path}")
 
     return paths

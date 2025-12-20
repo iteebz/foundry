@@ -13,13 +13,13 @@ def test_valid_config():
 
 def test_n_embd_not_divisible_by_n_head():
     """n_embd must be divisible by n_head."""
-    with pytest.raises(ValueError, match="n_embd.*divisible.*n_head"):
+    with pytest.raises(ValueError, match=r"n_embd.*divisible.*n_head"):
         GPTConfig(n_embd=100, n_head=12)
 
 
 def test_n_kv_head_exceeds_n_head():
     """n_kv_head cannot exceed n_head."""
-    with pytest.raises(ValueError, match="n_kv_head.*cannot exceed.*n_head"):
+    with pytest.raises(ValueError, match=r"n_kv_head.*cannot exceed.*n_head"):
         GPTConfig(n_head=4, n_kv_head=8)
 
 
@@ -37,7 +37,7 @@ def test_mla_with_latent_dim():
 
 def test_moe_top_k_exceeds_n_experts():
     """MoE top_k cannot exceed n_experts."""
-    with pytest.raises(ValueError, match="moe_top_k.*cannot exceed.*moe_n_experts"):
+    with pytest.raises(ValueError, match=r"moe_top_k.*cannot exceed.*moe_n_experts"):
         GPTConfig(mlp_type="moe", moe_n_experts=4, moe_top_k=8)
 
 

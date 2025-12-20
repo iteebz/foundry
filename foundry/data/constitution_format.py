@@ -40,13 +40,8 @@ def load_constitution(constitution_path: str | Path) -> list[dict[str, Any]]:
     if not constitution_path.exists():
         raise FileNotFoundError(f"Constitution not found: {constitution_path}")
 
-    pairs = []
-    with open(constitution_path) as f:
-        for line in f:
-            if line.strip():
-                pairs.append(json.loads(line))
-
-    return pairs
+    with constitution_path.open() as f:
+        return [json.loads(line) for line in f if line.strip()]
 
 
 def save_constitution(pairs: list[dict[str, Any]], output_path: str | Path) -> None:
@@ -54,9 +49,8 @@ def save_constitution(pairs: list[dict[str, Any]], output_path: str | Path) -> N
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(output_path, "w") as f:
-        for pair in pairs:
-            f.write(json.dumps(pair) + "\n")
+    with output_path.open("w") as f:
+        f.writelines(json.dumps(pair) + "\n" for pair in pairs)
 
 
 def validate_constitution(pairs: list[dict[str, Any]]) -> bool:

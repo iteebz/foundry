@@ -75,7 +75,7 @@ def apply_lora_to_model(
     r: int = 8,
     lora_alpha: int = 16,
     lora_dropout: float = 0.0,
-    target_modules: list[str] = None,
+    target_modules: list[str] | None = None,
 ) -> nn.Module:
     """Replace linear layers with LoRA adapters.
 

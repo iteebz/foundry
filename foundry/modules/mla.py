@@ -18,7 +18,7 @@ class MultiLatentAttention(nn.Module):
         self,
         n_embd: int,
         n_head: int,
-        latent_dim: int = None,
+        latent_dim: int | None = None,
         bias: bool = False,
         dropout: float = 0.0,
         block_size: int = 1024,

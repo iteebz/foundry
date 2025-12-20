@@ -146,6 +146,6 @@ def test_moe_top_k_parameter_respected():
         with torch.no_grad():
             router_logits = moe.router(x.view(-1, 64))
             routing_weights = torch.softmax(router_logits, dim=-1)
-            top_k_weights, top_k_indices = torch.topk(routing_weights, top_k, dim=-1)
+            _top_k_weights, top_k_indices = torch.topk(routing_weights, top_k, dim=-1)
 
             assert top_k_indices.shape[-1] == top_k, f"Should select {top_k} experts"

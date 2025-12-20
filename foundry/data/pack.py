@@ -45,7 +45,7 @@ def pack_sequences(
     current_length = 0
 
     for seq in sorted_seqs:
-        seq_with_eos = seq + [eos_token]
+        seq_with_eos = [*seq, eos_token]
 
         if current_length + len(seq_with_eos) <= max_length:
             current_pack.extend(seq_with_eos)

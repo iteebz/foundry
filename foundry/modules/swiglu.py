@@ -8,7 +8,7 @@ import torch.nn.functional as F
 class SwiGLU(nn.Module):
     """SwiGLU: Swish-Gated Linear Unit MLP."""
 
-    def __init__(self, dim: int, hidden_dim: int = None, bias: bool = False):
+    def __init__(self, dim: int, hidden_dim: int | None = None, bias: bool = False):
         super().__init__()
         if hidden_dim is None:
             hidden_dim = 4 * dim

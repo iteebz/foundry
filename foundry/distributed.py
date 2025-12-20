@@ -65,8 +65,7 @@ def wrap_model_distributed(
 
     if not torch.cuda.is_available():
         if rank == 0:
-            print("WARNING: Multi-process training on CPU (dev/testing only, very slow)")
-            print("         Using gloo backend with DDP")
+            pass
         from torch.nn.parallel import DistributedDataParallel as DDP
 
         model = DDP(model)
@@ -116,7 +115,7 @@ def init_distributed(backend: str = "nccl") -> tuple[bool, int, int]:
     Returns:
         (master_process, rank, world_size)
     """
-    rank, local_rank, world_size, is_distributed = get_world_info()
+    rank, _local_rank, world_size, is_distributed = get_world_info()
 
     if not is_distributed:
         return True, 0, 1
@@ -125,7 +124,7 @@ def init_distributed(backend: str = "nccl") -> tuple[bool, int, int]:
         if not torch.cuda.is_available() and backend == "nccl":
             backend = "gloo"
             if rank == 0:
-                print("Switching to gloo backend (CPU-only mode)")
+                pass
 
         torch.distributed.init_process_group(backend=backend)
 
@@ -141,25 +140,17 @@ def cleanup_distributed():
 
 def print_distributed_info(model: nn.Module, is_ddp: bool, is_fsdp: bool):
     """Print distributed training configuration."""
-    rank, local_rank, world_size, is_distributed = get_world_info()
+    rank, _local_rank, _world_size, is_distributed = get_world_info()
 
     if not is_distributed:
-        print("Training mode: Single GPU")
         return
 
-    total_params = sum(p.numel() for p in model.parameters()) / 1e6
+    sum(p.numel() for p in model.parameters()) / 1e6
 
-    if is_fsdp:
-        strategy = "FSDP (Fully Sharded Data Parallel)"
-    elif is_ddp:
-        strategy = "DDP (Distributed Data Parallel)"
+    if is_fsdp or is_ddp:
+        pass
     else:
-        strategy = "None"
+        pass
 
     if rank == 0:
-        print(f"Distributed training: {strategy}")
-        print(f"  World size: {world_size}")
-        print(f"  Model params: {total_params:.1f}M")
-        print(
-            f"  Backend: {torch.distributed.get_backend() if torch.distributed.is_initialized() else 'N/A'}"
-        )
+        pass

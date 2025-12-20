@@ -68,7 +68,7 @@ def test_gradient_accumulation_loss_scaling():
     Y = torch.randint(0, 256, (4, 128))
 
     with torch.no_grad():
-        logits, loss_full = model(X, Y)
+        _logits, loss_full = model(X, Y)
 
     raw_loss = loss_full.item()
 
@@ -101,7 +101,7 @@ def test_mixed_precision_no_nan():
         X = torch.randint(0, 256, (4, 128))
         Y = torch.randint(0, 256, (4, 128))
 
-        logits, loss = model(X, Y)
+        _logits, loss = model(X, Y)
         loss = loss / 1
 
         scaler.scale(loss).backward()

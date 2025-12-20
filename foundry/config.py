@@ -81,7 +81,7 @@ class RunConfig:
     @classmethod
     def from_yaml(cls, path: Path) -> "RunConfig":
         """Load configuration from YAML file."""
-        with open(path) as f:
+        with path.open() as f:
             raw = yaml.safe_load(f)
 
         name = raw.get("name", path.stem)

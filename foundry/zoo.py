@@ -101,7 +101,6 @@ def load_pretrained(
             state_dict = state_dict["model"]
 
         model.load_state_dict(state_dict, strict=False)
-        print(f"Loaded checkpoint from {checkpoint_path}")
 
     model.to(device)
     return model
@@ -140,22 +139,13 @@ def export_checkpoint(
         checkpoint["metadata"] = metadata
 
     torch.save(checkpoint, output_path)
-    print(f"Exported checkpoint to {output_path}")
 
 
 if __name__ == "__main__":
     import sys
 
     if len(sys.argv) < 2:
-        print("Usage: python -m src.zoo <model_name>")
-        print(f"Available models: {list(MODEL_CONFIGS.keys())}")
         sys.exit(1)
 
     model_name = sys.argv[1]
     model = load_pretrained(model_name)
-    print(f"\nLoaded {model_name}:")
-    print(f"  Params: {model.get_num_params() / 1e6:.1f}M")
-    print(f"  Layers: {model.config.n_layer}")
-    print(f"  Heads: {model.config.n_head} (KV: {model.config.n_kv_head})")
-    print(f"  Embedding: {model.config.n_embd}")
-    print(f"  Vocab: {model.config.vocab_size}")

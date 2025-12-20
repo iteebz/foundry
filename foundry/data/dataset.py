@@ -23,7 +23,7 @@ def validate_bin_file(path: Path, expected_dtype: np.dtype = np.uint16) -> dict:
     data = np.memmap(path, dtype=expected_dtype, mode="r")
     file_hash = hashlib.sha256()
 
-    with open(path, "rb") as f:
+    with path.open("rb") as f:
         for chunk in iter(lambda: f.read(8192), b""):
             file_hash.update(chunk)
 

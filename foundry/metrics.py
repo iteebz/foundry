@@ -14,7 +14,7 @@ class MetricLogger:
 
     def log(self, metrics: dict) -> None:
         """Append metrics to JSON Lines file."""
-        with open(self.metrics_path, "a") as f:
+        with self.metrics_path.open("a") as f:
             f.write(json.dumps(metrics) + "\n")
 
     def read_metrics(self) -> list[dict]:
@@ -22,12 +22,9 @@ class MetricLogger:
         if not self.metrics_path.exists():
             return []
 
-        metrics = []
-        with open(self.metrics_path) as f:
-            for line in f:
-                if line.strip():
-                    metrics.append(json.loads(line))
-        return metrics
+        return [
+            json.loads(line) for line in self.metrics_path.read_text().splitlines() if line.strip()
+        ]
 
     def get_final_metrics(self) -> dict | None:
         """Get the last logged metrics."""

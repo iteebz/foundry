@@ -25,7 +25,7 @@ def score_by_perplexity(tokens: list[int], model, device: str = "cpu") -> float:
             output = model(inputs, inputs)
             if not isinstance(output, tuple) or len(output) < 2:
                 raise ValueError(f"Model must return (logits, loss), got {type(output)}")
-            logits, loss = output
+            _logits, loss = output
             return float(loss.item())
         except Exception as e:
             raise ValueError(f"Model evaluation failed: {e}") from e

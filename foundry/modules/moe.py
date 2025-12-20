@@ -16,7 +16,7 @@ class MoELayer(nn.Module):
         n_embd: int,
         n_experts: int = 8,
         top_k: int = 2,
-        expert_hidden_dim: int = None,
+        expert_hidden_dim: int | None = None,
         bias: bool = False,
         dropout: float = 0.0,
     ):

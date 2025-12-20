@@ -34,6 +34,9 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101", "T20", "S108", "PTH123"]
+"foundry/train.py" = ["C901"]  # training loop is inherently complex
+"foundry/cli/sweep.py" = ["C901"]  # sweep orchestration
+"foundry/model.py" = ["C901"]  # config validation
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

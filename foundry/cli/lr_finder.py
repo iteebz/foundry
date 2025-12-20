@@ -38,7 +38,7 @@ def lr_find(model, get_batch, device, ctx, min_lr=1e-7, max_lr=10, num_steps=100
 
         X, Y = get_batch("train")
         with ctx:
-            logits, loss = model(X, Y)
+            _logits, loss = model(X, Y)
 
         loss.backward()
         optimizer.step()
@@ -122,8 +122,8 @@ def find_lr(
     meta_path = data_dir / "meta.pkl"
 
     if meta_path.exists():
-        with open(meta_path, "rb") as f:
-            meta = pickle.load(f)
+        with meta_path.open("rb") as f:
+            meta = pickle.load(f)  # noqa: S301 - trusted internal checkpoint
         vocab_size = meta["vocab_size"]
     else:
         vocab_size = 50304

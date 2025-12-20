@@ -42,7 +42,7 @@ def evaluate_constitution(
             "preference_accuracy": 0.0,
         }
 
-    with open(dataset_path) as f:
+    with dataset_path.open() as f:
         data = [json.loads(line) for line in f]
 
     if max_samples:

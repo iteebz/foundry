@@ -21,17 +21,19 @@ class Conversation:
     @classmethod
     def from_sharegpt(cls, data: dict[str, Any]) -> "Conversation":
         """Parse ShareGPT format conversation."""
-        messages = []
-        for msg in data.get("conversations", []):
-            messages.append(Message(role=msg.get("from", "unknown"), content=msg.get("value", "")))
+        messages = [
+            Message(role=msg.get("from", "unknown"), content=msg.get("value", ""))
+            for msg in data.get("conversations", [])
+        ]
         return cls(messages=messages)
 
     @classmethod
     def from_openai(cls, data: dict[str, Any]) -> "Conversation":
         """Parse OpenAI format conversation."""
-        messages = []
-        for msg in data.get("messages", []):
-            messages.append(Message(role=msg.get("role", "user"), content=msg.get("content", "")))
+        messages = [
+            Message(role=msg.get("role", "user"), content=msg.get("content", ""))
+            for msg in data.get("messages", [])
+        ]
         return cls(messages=messages)
 
 
@@ -160,10 +162,3 @@ if __name__ == "__main__":
             Message(role="assistant", content="4"),
         ]
     )
-
-    print("ChatML:")
-    print(format_chatml(conv))
-    print("\nLlama3:")
-    print(format_llama3(conv))
-    print("\nAlpaca:")
-    print(format_alpaca(conv))
