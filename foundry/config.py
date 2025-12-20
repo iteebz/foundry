@@ -41,6 +41,7 @@ class TrainingConfig:
     beta1: float = 0.9
     beta2: float = 0.95
     grad_clip: float = 1.0
+    log_gns: bool = False
     use_ema: bool = True
     ema_decay: float = 0.9999
     decay_lr: bool = True
@@ -215,6 +216,7 @@ class RunConfig:
                 "beta1": self.training.beta1,
                 "beta2": self.training.beta2,
                 "grad_clip": self.training.grad_clip,
+                "log_gns": self.training.log_gns,
                 "use_ema": self.training.use_ema,
                 "ema_decay": self.training.ema_decay,
                 "decay_lr": self.training.decay_lr,
