@@ -112,8 +112,6 @@ def train(config_path: str | Path):
         with meta_path.open("rb") as f:
             meta = pickle.load(f)  # noqa: S301 - trusted internal checkpoint
         config.model.vocab_size = meta["vocab_size"]
-        if master_process:
-            pass
     elif config.model.vocab_size is None:
         config.model.vocab_size = 50304
 
@@ -121,7 +119,7 @@ def train(config_path: str | Path):
     model.to(device)
 
     if config.lora.enabled:
-        from foundry.lora import apply_lora_to_model, get_lora_params
+        from foundry.lora import apply_lora_to_model
 
         model = apply_lora_to_model(
             model,
@@ -129,8 +127,6 @@ def train(config_path: str | Path):
             lora_alpha=config.lora.lora_alpha,
             lora_dropout=config.lora.lora_dropout,
         )
-        if master_process:
-            get_lora_params(model)
 
     scaler = torch.cuda.amp.GradScaler(enabled=(dtype == "float16"))
     optimizer = model.configure_optimizers(
@@ -141,8 +137,6 @@ def train(config_path: str | Path):
     )
 
     if config.training.compile:
-        if master_process:
-            pass
         model = torch.compile(model, mode=config.training.compile_mode)
 
     model, is_ddp, is_fsdp = wrap_model_distributed(
@@ -191,9 +185,6 @@ def train(config_path: str | Path):
         train_dataset = MixtureDataset(train_datasets, weights, seed=seed)
         val_dataset = MixtureDataset(val_datasets, weights, seed=seed)
 
-        if master_process:
-            for _i, _src in enumerate(config.data.sources):
-                pass
     else:
         train_dataset = TokenDataset(data_dir / "train.bin", block_size=config.data.block_size)
         val_dataset = TokenDataset(data_dir / "val.bin", block_size=config.data.block_size)
@@ -240,11 +231,7 @@ def train(config_path: str | Path):
     iter_num = 0
     best_val_loss = 1e9
     current_epoch = 0
-    len(train_loader) * config.data.batch_size
-    t0 = time.time()
-
-    if master_process:
-        pass
+    time.time()
 
     train_iter = iter(train_loader)
     if train_sampler is not None:
@@ -306,8 +293,6 @@ def train(config_path: str | Path):
                     tmp_path = ckpt_path.with_suffix(".tmp")
                     torch.save(checkpoint, tmp_path)
                     tmp_path.replace(ckpt_path)
-                    if master_process:
-                        pass
 
         if iter_num == 0 and config.training.eval_only:
             break
@@ -346,12 +331,7 @@ def train(config_path: str | Path):
         if ema_model:
             ema_model.update(raw_model)
 
-        t1 = time.time()
-        t1 - t0
-        t0 = t1
-
-        if iter_num % config.training.log_interval == 0 and master_process:
-            loss.item() * config.training.gradient_accumulation_steps
+        time.time()
 
         iter_num += 1
 
@@ -359,9 +339,7 @@ def train(config_path: str | Path):
             break
 
     if master_process:
-        val_iter = (
-            (X.to(device), Y.to(device)) for X, Y in val_loader
-        )
+        val_iter = ((X.to(device), Y.to(device)) for X, Y in val_loader)
         evaluate(
             raw_model,
             val_iter,

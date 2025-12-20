@@ -20,15 +20,16 @@ class DummyModel:
         return None, torch.tensor(2.5)
 
 
-def dummy_get_batch(split):
-    """Mock batch generator."""
-    return torch.zeros((4, 8)), torch.zeros((4, 8))
+def dummy_batch_iter(n=100):
+    """Mock batch iterator."""
+    for _ in range(n):
+        yield torch.zeros((4, 8)), torch.zeros((4, 8))
 
 
 def test_evaluate_basic():
     """Eval returns loss and perplexity."""
     model = DummyModel()
-    results = evaluate(model, dummy_get_batch, max_iters=10)
+    results = evaluate(model, dummy_batch_iter(), max_iters=10)
 
     assert "loss" in results
     assert "perplexity" in results
@@ -39,7 +40,7 @@ def test_evaluate_basic():
 def test_evaluate_shape():
     """Eval works with different batch shapes."""
     model = DummyModel()
-    results = evaluate(model, dummy_get_batch, max_iters=5)
+    results = evaluate(model, dummy_batch_iter(), max_iters=5)
 
     assert isinstance(results["loss"], float)
     assert isinstance(results["perplexity"], float | np.floating)
@@ -56,6 +57,6 @@ def test_evaluate_iterations():
             return None, torch.tensor(1.0)
 
     model = CountingModel()
-    evaluate(model, dummy_get_batch, max_iters=20)
+    evaluate(model, dummy_batch_iter(20), max_iters=20)
 
     assert call_count == 20

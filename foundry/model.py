@@ -215,9 +215,6 @@ class GPTConfig:
         if self.sparse_block_size is not None and self.sparse_stride is None:
             self.sparse_stride = self.sparse_block_size
 
-        if self.attention_type == "mla" and self.mla_latent_dim is None:
-            self.mla_latent_dim = self.n_embd // 2
-
         if self.mlp_type == "moe" and self.moe_top_k > self.moe_n_experts:
             raise ValueError(
                 f"moe_top_k ({self.moe_top_k}) cannot exceed moe_n_experts ({self.moe_n_experts})"

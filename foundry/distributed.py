@@ -55,7 +55,7 @@ def wrap_model_distributed(
     Returns:
         (wrapped_model, is_ddp, is_fsdp)
     """
-    rank, local_rank, world_size, is_distributed = get_world_info()
+    _rank, local_rank, world_size, is_distributed = get_world_info()
 
     if not is_distributed or world_size == 1:
         return model, False, False
@@ -64,8 +64,6 @@ def wrap_model_distributed(
         return model, False, False
 
     if not torch.cuda.is_available():
-        if rank == 0:
-            pass
         from torch.nn.parallel import DistributedDataParallel as DDP
 
         model = DDP(model)
@@ -123,9 +121,6 @@ def init_distributed(backend: str = "nccl") -> tuple[bool, int, int]:
     if not torch.distributed.is_initialized():
         if not torch.cuda.is_available() and backend == "nccl":
             backend = "gloo"
-            if rank == 0:
-                pass
-
         torch.distributed.init_process_group(backend=backend)
 
     master_process = rank == 0
@@ -142,15 +137,7 @@ def print_distributed_info(model: nn.Module, is_ddp: bool, is_fsdp: bool):
     """Print distributed training configuration."""
     rank, _local_rank, _world_size, is_distributed = get_world_info()
 
-    if not is_distributed:
+    if not is_distributed or rank != 0:
         return
 
-    sum(p.numel() for p in model.parameters()) / 1e6
-
-    if is_fsdp or is_ddp:
-        pass
-    else:
-        pass
-
-    if rank == 0:
-        pass
+    _ = is_ddp, is_fsdp, model
