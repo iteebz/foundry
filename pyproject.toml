@@ -6,6 +6,8 @@ dependencies = [
     "torch",
     "numpy",
     "typer",
+    "tiktoken",
+    "datasets",
 ]
 
 [project.optional-dependencies]

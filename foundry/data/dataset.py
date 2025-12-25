@@ -8,12 +8,15 @@ import torch
 from torch.utils.data import Dataset
 
 
-def validate_bin_file(path: Path, expected_dtype: np.dtype = np.uint16) -> dict:
+def validate_bin_file(path: Path, expected_dtype: np.dtype | None = None) -> dict:
     if not path.exists():
         raise FileNotFoundError(f"Token file not found: {path}")
 
     if path.stat().st_size == 0:
         raise ValueError(f"Empty token file: {path}")
+
+    if expected_dtype is None:
+        expected_dtype = _detect_dtype(path)
 
     if path.stat().st_size % np.dtype(expected_dtype).itemsize != 0:
         raise ValueError(
@@ -36,6 +39,20 @@ def validate_bin_file(path: Path, expected_dtype: np.dtype = np.uint16) -> dict:
     }
 
 
+def _detect_dtype(path: Path) -> np.dtype:
+    """Auto-detect dtype: uint16 for GPT-2 (50k vocab), uint32 for cl100k (100k vocab)."""
+    file_size = path.stat().st_size
+    if file_size == 0:
+        return np.dtype(np.uint16)
+    if file_size % 4 == 0 and file_size >= 4:
+        data = np.memmap(path, dtype=np.uint32, mode="r")
+        if len(data) > 0:
+            max_token = int(data[: min(100000, len(data))].max())
+            if max_token > 65535:
+                return np.dtype(np.uint32)
+    return np.dtype(np.uint16)
+
+
 class TokenDataset(Dataset):
     """Memory-mapped or streaming token dataset (auto-detects based on size)."""
 
@@ -45,11 +62,17 @@ class TokenDataset(Dataset):
         block_size: int,
         streaming_threshold: int = 1_000_000_000,
         validate: bool = True,
+        dtype: np.dtype | None = None,
     ):
         data_path = Path(data_path)
 
+        if validate and data_path.stat().st_size == 0:
+            raise ValueError(f"Empty token file: {data_path}")
+
+        self.dtype = dtype if dtype is not None else _detect_dtype(data_path)
+
         if validate:
-            self._validation = validate_bin_file(data_path, expected_dtype=np.uint16)
+            self._validation = validate_bin_file(data_path, expected_dtype=self.dtype)
 
         self.data_path = data_path
         self.block_size = block_size
@@ -64,7 +87,7 @@ class TokenDataset(Dataset):
 
     def _init_memmap(self):
         """Fast random access via memory mapping."""
-        self.data = np.memmap(self.data_path, dtype=np.uint16, mode="r")
+        self.data = np.memmap(self.data_path, dtype=self.dtype, mode="r")
         self._length = len(self.data) - self.block_size
 
         if self._length <= 0:
@@ -74,7 +97,7 @@ class TokenDataset(Dataset):
 
     def _init_streaming(self):
         """Streaming for large files (sequential access with buffering)."""
-        self.data = np.memmap(self.data_path, dtype=np.uint16, mode="r")
+        self.data = np.memmap(self.data_path, dtype=self.dtype, mode="r")
         self._length = len(self.data) - self.block_size
 
         if self._length <= 0:

@@ -1,0 +1,28 @@
+name: "micro"
+
+training:
+  seed: 1337
+  max_iters: 1000
+  learning_rate: 3e-4
+  eval_interval: 100
+  compile: false
+  device: mps
+  dtype: float32
+
+data:
+  dataset: "tinystories"
+  batch_size: 32
+  block_size: 256
+
+model_args:
+  n_layer: 4
+  n_head: 4
+  n_kv_head: 2
+  n_embd: 256
+  vocab_size: 100277
+  dropout: 0.0
+  bias: false
+  norm_type: "rmsnorm"
+  activation: "swiglu"
+  position_encoding: "rope"
+  attention_type: "gqa"

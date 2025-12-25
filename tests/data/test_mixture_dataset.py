@@ -53,9 +53,9 @@ def test_mixture_dataset_rejects_weight_mismatch():
     """Mixture with mismatched weights/datasets raises ValueError."""
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "ds.bin"
-        np.array([1, 2, 3, 4], dtype=np.uint16).tofile(path)
+        np.array([1, 2, 3, 4, 5, 6], dtype=np.uint16).tofile(path)
 
-        ds = TokenDataset(path, block_size=2)
+        ds = TokenDataset(path, block_size=2, dtype=np.uint16)
 
         with pytest.raises(ValueError):
             MixtureDataset([ds], weights=[0.5, 0.5])
@@ -66,14 +66,14 @@ def test_mixture_dataset_resample_changes_indices():
     with tempfile.TemporaryDirectory() as tmpdir:
         path1 = Path(tmpdir) / "ds1.bin"
         path2 = Path(tmpdir) / "ds2.bin"
-        np.array([1, 2, 3, 4, 5, 6], dtype=np.uint16).tofile(path1)
-        np.array([7, 8, 9, 10, 11, 12], dtype=np.uint16).tofile(path2)
+        np.array(list(range(20)), dtype=np.uint16).tofile(path1)
+        np.array(list(range(20, 40)), dtype=np.uint16).tofile(path2)
 
-        ds1 = TokenDataset(path1, block_size=2)
-        ds2 = TokenDataset(path2, block_size=2)
+        ds1 = TokenDataset(path1, block_size=2, dtype=np.uint16)
+        ds2 = TokenDataset(path2, block_size=2, dtype=np.uint16)
 
         mixture = MixtureDataset([ds1, ds2], weights=[0.5, 0.5], seed=42)
         original_indices = mixture.indices[:]
 
-        mixture.resample()
+        mixture.resample(seed=999)
         assert mixture.indices != original_indices

@@ -30,12 +30,14 @@ lint:
 fix:
     @uv run ruff check . --fix --unsafe-fixes
 
-train-smoke:
-    @echo "==> Smoke test: baseline"
-    uv run python src/train.py experiments/baseline.yaml
+prepare-tinystories:
+    uv run python -m foundry.data.prepare
 
-compare:
-    uv run python compare.py experiments/baseline.yaml experiments/modern.yaml
+train-micro:
+    uv run python -m foundry.train experiments/micro.yaml
+
+train-baseline:
+    uv run python -m foundry.train experiments/baseline.yaml
 
 commits:
     @git --no-pager log --pretty=format:"%h | %ar | %s"
