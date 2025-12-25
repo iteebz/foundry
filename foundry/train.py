@@ -2,14 +2,25 @@
 
 import math
 import pickle
+import signal
 import sys
 import time
+import traceback
 from contextlib import nullcontext
 from pathlib import Path
 
+
+def _sigint_handler(sig, frame):
+    print("\n\nInterrupted! Stack trace:")
+    traceback.print_stack(frame)
+    sys.exit(1)
+
+
+signal.signal(signal.SIGINT, _sigint_handler)
+
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 
 from foundry.config import RunConfig
@@ -57,6 +68,7 @@ class EMA:
 
 def train(config_path: str | Path):
     """Main training loop."""
+    print(f"Loading config from {config_path}...")
     config = RunConfig.from_yaml(Path(config_path))
 
     master_process, rank, world_size = init_distributed(backend="nccl")
@@ -99,11 +111,8 @@ def train(config_path: str | Path):
     ptdtype = {"float32": torch.float32, "bfloat16": torch.bfloat16, "float16": torch.float16}[
         dtype
     ]
-    ctx = (
-        nullcontext()
-        if device_type == "cpu"
-        else torch.amp.autocast(device_type=device_type, dtype=ptdtype)
-    )
+    use_amp = device_type == "cuda" and dtype in ("float16", "bfloat16")
+    ctx = torch.amp.autocast(device_type="cuda", dtype=ptdtype) if use_amp else nullcontext()
 
     data_dir = Path("data") / config.data.dataset
 
@@ -115,8 +124,10 @@ def train(config_path: str | Path):
     elif config.model.vocab_size is None:
         config.model.vocab_size = 50304
 
+    print(f"Building model on {device}...")
     model = GPT(config.model)
     model.to(device)
+    print(f"Model params: {sum(p.numel() for p in model.parameters()):,}")
 
     if config.lora.enabled:
         from foundry.lora import apply_lora_to_model
@@ -128,7 +139,7 @@ def train(config_path: str | Path):
             lora_dropout=config.lora.lora_dropout,
         )
 
-    scaler = torch.cuda.amp.GradScaler(enabled=(dtype == "float16"))
+    scaler = torch.amp.GradScaler("cuda", enabled=(use_amp and dtype == "float16"))
     optimizer = model.configure_optimizers(
         config.training.weight_decay,
         config.training.learning_rate,
@@ -206,29 +217,34 @@ def train(config_path: str | Path):
         val_dataset = MixtureDataset(val_datasets, weights, seed=seed)
 
     else:
+        print(f"Loading dataset from {data_dir}...")
         train_dataset = TokenDataset(data_dir / "train.bin", block_size=config.data.block_size)
         val_dataset = TokenDataset(data_dir / "val.bin", block_size=config.data.block_size)
+        print(f"Train tokens: {len(train_dataset):,} | Val tokens: {len(val_dataset):,}")
 
-    train_sampler = DistributedSampler(train_dataset, shuffle=True) if world_size > 1 else None
+    if world_size > 1:
+        train_sampler = DistributedSampler(train_dataset, shuffle=True)
+    else:
+        train_sampler = RandomSampler(train_dataset, replacement=True, num_samples=len(train_dataset))
     val_sampler = DistributedSampler(val_dataset, shuffle=False) if world_size > 1 else None
 
+    num_workers = 0 if device_type == "mps" else 4
     train_loader = DataLoader(
         train_dataset,
         batch_size=config.data.batch_size,
         sampler=train_sampler,
-        shuffle=(train_sampler is None),
-        num_workers=4,
-        pin_memory=True,
-        persistent_workers=True,
+        num_workers=num_workers,
+        pin_memory=(device_type == "cuda"),
+        persistent_workers=(num_workers > 0),
     )
     val_loader = DataLoader(
         val_dataset,
         batch_size=config.data.batch_size,
         sampler=val_sampler,
         shuffle=False,
-        num_workers=2,
-        pin_memory=True,
-        persistent_workers=True,
+        num_workers=num_workers,
+        pin_memory=(device_type == "cuda"),
+        persistent_workers=(num_workers > 0),
     )
 
     @torch.no_grad()
@@ -251,15 +267,19 @@ def train(config_path: str | Path):
     current_epoch = 0
     last_gns = None
     train_iter = iter(train_loader)
-    if train_sampler is not None:
+    if hasattr(train_sampler, "set_epoch"):
         train_sampler.set_epoch(current_epoch)
+
+    print("Starting training...")
+    print("Getting first batch...")
 
     while True:
         try:
             X, Y = next(train_iter)
+            print(f"Got batch: {X.shape}") if iter_num == 0 else None
         except StopIteration:
             current_epoch += 1
-            if train_sampler is not None:
+            if hasattr(train_sampler, "set_epoch"):
                 train_sampler.set_epoch(current_epoch)
             train_iter = iter(train_loader)
             X, Y = next(train_iter)
@@ -269,7 +289,7 @@ def train(config_path: str | Path):
         for param_group in optimizer.param_groups:
             param_group["lr"] = lr
 
-        if iter_num % config.training.eval_interval == 0 and master_process:
+        if iter_num > 0 and iter_num % config.training.eval_interval == 0 and master_process:
             losses = estimate_loss()
 
             metrics = {
@@ -361,7 +381,7 @@ def train(config_path: str | Path):
                     X, Y = next(train_iter)
                 except StopIteration:
                     current_epoch += 1
-                    if train_sampler is not None:
+                    if hasattr(train_sampler, "set_epoch"):
                         train_sampler.set_epoch(current_epoch)
                     train_iter = iter(train_loader)
                     X, Y = next(train_iter)
@@ -390,7 +410,8 @@ def train(config_path: str | Path):
         if ema_model:
             ema_model.update(raw_model)
 
-        time.time()
+        if master_process and iter_num % config.training.log_interval == 0:
+            print(f"iter {iter_num}/{config.training.max_iters} | loss {loss.item() * effective_grad_accum:.4f} | lr {lr:.2e}")
 
         iter_num += 1
 

@@ -3,7 +3,7 @@ name: "micro"
 training:
   seed: 1337
   max_iters: 1000
-  learning_rate: 3e-4
+  learning_rate: 0.0003
   eval_interval: 100
   compile: false
   device: mps
