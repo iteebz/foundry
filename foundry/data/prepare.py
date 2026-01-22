@@ -23,10 +23,8 @@ def prepare_tinystories(out_dir: Path | str = "data/tinystories", encoding: str 
             tokens.append(enc.eot_token)
         return tokens
 
-    print("Tokenizing train...")
     train_tokens = tokenize_split(ds)
 
-    print("Tokenizing val...")
     val_tokens = tokenize_split(val_ds)
 
     train_arr = np.array(train_tokens, dtype=np.uint32)

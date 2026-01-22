@@ -4,36 +4,34 @@ import math
 import pickle
 import signal
 import sys
-import time
 import traceback
 from contextlib import nullcontext
 from pathlib import Path
 
 
 def _sigint_handler(sig, frame):
-    print("\n\nInterrupted! Stack trace:")
     traceback.print_stack(frame)
     sys.exit(1)
 
 
 signal.signal(signal.SIGINT, _sigint_handler)
 
-import numpy as np
-import torch
-from torch.utils.data import DataLoader, RandomSampler
-from torch.utils.data.distributed import DistributedSampler
+import numpy as np  # noqa: E402
+import torch  # noqa: E402
+from torch.utils.data import DataLoader, RandomSampler  # noqa: E402
+from torch.utils.data.distributed import DistributedSampler  # noqa: E402
 
-from foundry.config import RunConfig
-from foundry.data.dataset import MixtureDataset, TokenDataset
-from foundry.distributed import (
+from foundry.config import RunConfig  # noqa: E402
+from foundry.data.dataset import MixtureDataset, TokenDataset  # noqa: E402
+from foundry.distributed import (  # noqa: E402
     cleanup_distributed,
     init_distributed,
     print_distributed_info,
     wrap_model_distributed,
 )
-from foundry.eval import evaluate
-from foundry.metrics import MetricLogger
-from foundry.model import GPT
+from foundry.eval import evaluate  # noqa: E402
+from foundry.metrics import MetricLogger  # noqa: E402
+from foundry.model import GPT  # noqa: E402
 
 
 def get_lr(it, config):
@@ -68,7 +66,6 @@ class EMA:
 
 def train(config_path: str | Path):
     """Main training loop."""
-    print(f"Loading config from {config_path}...")
     config = RunConfig.from_yaml(Path(config_path))
 
     master_process, rank, world_size = init_distributed(backend="nccl")
@@ -124,10 +121,8 @@ def train(config_path: str | Path):
     elif config.model.vocab_size is None:
         config.model.vocab_size = 50304
 
-    print(f"Building model on {device}...")
     model = GPT(config.model)
     model.to(device)
-    print(f"Model params: {sum(p.numel() for p in model.parameters()):,}")
 
     if config.lora.enabled:
         from foundry.lora import apply_lora_to_model
@@ -217,15 +212,15 @@ def train(config_path: str | Path):
         val_dataset = MixtureDataset(val_datasets, weights, seed=seed)
 
     else:
-        print(f"Loading dataset from {data_dir}...")
         train_dataset = TokenDataset(data_dir / "train.bin", block_size=config.data.block_size)
         val_dataset = TokenDataset(data_dir / "val.bin", block_size=config.data.block_size)
-        print(f"Train tokens: {len(train_dataset):,} | Val tokens: {len(val_dataset):,}")
 
     if world_size > 1:
         train_sampler = DistributedSampler(train_dataset, shuffle=True)
     else:
-        train_sampler = RandomSampler(train_dataset, replacement=True, num_samples=len(train_dataset))
+        train_sampler = RandomSampler(
+            train_dataset, replacement=True, num_samples=len(train_dataset)
+        )
     val_sampler = DistributedSampler(val_dataset, shuffle=False) if world_size > 1 else None
 
     num_workers = 0 if device_type == "mps" else 4
@@ -270,13 +265,9 @@ def train(config_path: str | Path):
     if hasattr(train_sampler, "set_epoch"):
         train_sampler.set_epoch(current_epoch)
 
-    print("Starting training...")
-    print("Getting first batch...")
-
     while True:
         try:
             X, Y = next(train_iter)
-            print(f"Got batch: {X.shape}") if iter_num == 0 else None
         except StopIteration:
             current_epoch += 1
             if hasattr(train_sampler, "set_epoch"):
@@ -411,7 +402,7 @@ def train(config_path: str | Path):
             ema_model.update(raw_model)
 
         if master_process and iter_num % config.training.log_interval == 0:
-            print(f"iter {iter_num}/{config.training.max_iters} | loss {loss.item() * effective_grad_accum:.4f} | lr {lr:.2e}")
+            pass
 
         iter_num += 1
 
