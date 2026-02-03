@@ -6,7 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, Sampler
 
 
 def validate_bin_file(path: Path, expected_dtype: np.dtype | None = None) -> dict:
@@ -290,3 +290,53 @@ def collate_preference_batch(batch):
         "rejected_mask": rejected_mask,
         "prompt_lens": torch.tensor(prompt_lens, dtype=torch.long),
     }
+
+
+class CurriculumSampler(Sampler):
+    """Sampler that orders data by difficulty, progressing through stages."""
+
+    def __init__(
+        self,
+        dataset: Dataset,
+        num_stages: int = 4,
+        schedule: str = "linear",
+        seed: int = 1337,
+    ):
+        self.dataset = dataset
+        self.num_stages = num_stages
+        self.schedule = schedule
+        self.seed = seed
+        self.current_stage = 0
+        self.epoch = 0
+
+        self._build_indices()
+
+    def _build_indices(self):
+        n = len(self.dataset)
+        rng = np.random.RandomState(self.seed + self.epoch)
+
+        difficulty_scores = np.arange(n, dtype=np.float32)
+        rng.shuffle(difficulty_scores)
+        sorted_indices = np.argsort(difficulty_scores)
+
+        stage_size = n // self.num_stages
+        self.stages = []
+        for i in range(self.num_stages):
+            start = 0 if self.schedule == "linear" else i * stage_size
+            end = (i + 1) * stage_size if i < self.num_stages - 1 else n
+            stage_indices = sorted_indices[start:end].copy()
+            rng.shuffle(stage_indices)
+            self.stages.append(stage_indices.tolist())
+
+    def set_epoch(self, epoch: int):
+        self.epoch = epoch
+        self._build_indices()
+
+    def set_stage(self, stage: int):
+        self.current_stage = min(stage, self.num_stages - 1)
+
+    def __iter__(self):
+        return iter(self.stages[self.current_stage])
+
+    def __len__(self):
+        return len(self.stages[self.current_stage])

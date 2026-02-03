@@ -22,7 +22,8 @@ from torch.utils.data import DataLoader, RandomSampler  # noqa: E402
 from torch.utils.data.distributed import DistributedSampler  # noqa: E402
 
 from foundry.config import RunConfig  # noqa: E402
-from foundry.data.dataset import MixtureDataset, TokenDataset  # noqa: E402
+from foundry.data.curriculum import get_curriculum_stage  # noqa: E402
+from foundry.data.dataset import CurriculumSampler, MixtureDataset, TokenDataset  # noqa: E402
 from foundry.distributed import (  # noqa: E402
     cleanup_distributed,
     init_distributed,
@@ -215,8 +216,16 @@ def train(config_path: str | Path):
         train_dataset = TokenDataset(data_dir / "train.bin", block_size=config.data.block_size)
         val_dataset = TokenDataset(data_dir / "val.bin", block_size=config.data.block_size)
 
+    use_curriculum = config.data.curriculum.enabled and world_size == 1
     if world_size > 1:
         train_sampler = DistributedSampler(train_dataset, shuffle=True)
+    elif use_curriculum:
+        train_sampler = CurriculumSampler(
+            train_dataset,
+            num_stages=config.data.curriculum.num_stages,
+            schedule=config.data.curriculum.schedule,
+            seed=seed,
+        )
     else:
         train_sampler = RandomSampler(
             train_dataset, replacement=True, num_samples=len(train_dataset)
@@ -265,6 +274,8 @@ def train(config_path: str | Path):
     if hasattr(train_sampler, "set_epoch"):
         train_sampler.set_epoch(current_epoch)
 
+    total_epochs = max(1, config.training.max_iters // len(train_loader))
+
     while True:
         try:
             X, Y = next(train_iter)
@@ -272,6 +283,11 @@ def train(config_path: str | Path):
             current_epoch += 1
             if hasattr(train_sampler, "set_epoch"):
                 train_sampler.set_epoch(current_epoch)
+            if use_curriculum:
+                new_stage = get_curriculum_stage(
+                    current_epoch, total_epochs, config.data.curriculum.num_stages
+                )
+                train_sampler.set_stage(new_stage)
             train_iter = iter(train_loader)
             X, Y = next(train_iter)
 

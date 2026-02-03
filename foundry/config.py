@@ -17,11 +17,20 @@ class DataSource:
 
 
 @dataclass
+class CurriculumConfig:
+    enabled: bool = False
+    num_stages: int = 4
+    schedule: str = "linear"
+    score_by: str = "length"
+
+
+@dataclass
 class DataConfig:
     dataset: str = "openwebtext"
     batch_size: int = 64
     block_size: int = 256
     sources: list[DataSource] = field(default_factory=list)
+    curriculum: CurriculumConfig = field(default_factory=CurriculumConfig)
 
 
 @dataclass
@@ -131,7 +140,11 @@ class RunConfig:
 
         sources_raw = data_args.pop("sources", [])
         sources = [DataSource(**s) for s in sources_raw] if sources_raw else []
-        data_config = DataConfig(**data_args, sources=sources)
+        curriculum_raw = data_args.pop("curriculum", {})
+        curriculum_config = (
+            CurriculumConfig(**curriculum_raw) if curriculum_raw else CurriculumConfig()
+        )
+        data_config = DataConfig(**data_args, sources=sources, curriculum=curriculum_config)
 
         lora_args = raw.get("lora", {})
         lora_config = LoRAConfig(**lora_args)
@@ -170,7 +183,11 @@ class RunConfig:
         data_args = raw.get("data", {})
         sources_raw = data_args.pop("sources", [])
         sources = [DataSource(**s) for s in sources_raw] if sources_raw else []
-        data_config = DataConfig(**data_args, sources=sources)
+        curriculum_raw = data_args.pop("curriculum", {})
+        curriculum_config = (
+            CurriculumConfig(**curriculum_raw) if curriculum_raw else CurriculumConfig()
+        )
+        data_config = DataConfig(**data_args, sources=sources, curriculum=curriculum_config)
 
         lora_config = LoRAConfig(**raw.get("lora", {}))
         wandb_config = WandbConfig(**raw.get("wandb", {}))
@@ -252,6 +269,12 @@ class RunConfig:
                 "batch_size": self.data.batch_size,
                 "block_size": self.data.block_size,
                 "sources": [{"path": s.path, "weight": s.weight} for s in self.data.sources],
+                "curriculum": {
+                    "enabled": self.data.curriculum.enabled,
+                    "num_stages": self.data.curriculum.num_stages,
+                    "schedule": self.data.curriculum.schedule,
+                    "score_by": self.data.curriculum.score_by,
+                },
             },
             "lora": {
                 "enabled": self.lora.enabled,

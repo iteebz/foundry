@@ -88,6 +88,32 @@ def test_get_curriculum_stage():
     assert get_curriculum_stage(99, 100, num_stages=4) == 3
 
 
+def test_curriculum_sampler():
+    """CurriculumSampler progresses through stages."""
+    from torch.utils.data import TensorDataset
+
+    from foundry.data.dataset import CurriculumSampler
+
+    data = torch.arange(100).unsqueeze(1)
+    dataset = TensorDataset(data)
+
+    sampler = CurriculumSampler(dataset, num_stages=4, schedule="linear", seed=42)
+
+    assert sampler.current_stage == 0
+    stage0_len = len(sampler)
+
+    sampler.set_stage(1)
+    assert sampler.current_stage == 1
+    stage1_len = len(sampler)
+    assert stage1_len >= stage0_len
+
+    sampler.set_stage(3)
+    assert sampler.current_stage == 3
+
+    indices = list(sampler)
+    assert len(indices) == len(sampler)
+
+
 if __name__ == "__main__":
     test_score_by_length()
     test_score_by_perplexity()
@@ -95,4 +121,5 @@ if __name__ == "__main__":
     test_curriculum_schedule_linear()
     test_curriculum_schedule_step()
     test_get_curriculum_stage()
+    test_curriculum_sampler()
     print("\n✓ All curriculum tests passed")
