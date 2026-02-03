@@ -124,3 +124,45 @@ def test_collate_preference_batch(tmp_path):
     assert batch["rejected_ids"].shape[0] == 2
     assert batch["chosen_mask"].shape == batch["chosen_ids"].shape
     assert batch["prompt_lens"].shape == (2,)
+
+
+def test_train_dispatches_to_dpo(tmp_path):
+    """train.py dispatches to train_dpo when dpo.enabled=true."""
+    from foundry.train import _is_dpo_config
+
+    sft_config = tmp_path / "sft.yaml"
+    sft_config.write_text("""
+name: sft
+training:
+  seed: 1337
+  max_iters: 10
+data:
+  dataset: shakespeare_char
+  batch_size: 2
+  block_size: 64
+model_args:
+  n_layer: 1
+  n_head: 1
+  n_embd: 32
+""")
+    assert not _is_dpo_config(sft_config)
+
+    dpo_config = tmp_path / "dpo.yaml"
+    dpo_config.write_text("""
+name: dpo
+training:
+  seed: 1337
+  max_iters: 10
+data:
+  dataset: shakespeare_char
+  batch_size: 2
+  block_size: 64
+model_args:
+  n_layer: 1
+  n_head: 1
+  n_embd: 32
+dpo:
+  enabled: true
+  preference_data: /tmp/prefs.jsonl
+""")
+    assert _is_dpo_config(dpo_config)

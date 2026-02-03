@@ -18,6 +18,7 @@ signal.signal(signal.SIGINT, _sigint_handler)
 
 import numpy as np  # noqa: E402
 import torch  # noqa: E402
+import yaml  # noqa: E402
 from torch.utils.data import DataLoader, RandomSampler  # noqa: E402
 from torch.utils.data.distributed import DistributedSampler  # noqa: E402
 
@@ -438,8 +439,20 @@ def train(config_path: str | Path):
     cleanup_distributed()
 
 
+def _is_dpo_config(config_path: str | Path) -> bool:
+    with Path(config_path).open() as f:
+        raw = yaml.safe_load(f)
+    return raw.get("dpo", {}).get("enabled", False)
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         sys.exit(1)
 
-    train(sys.argv[1])
+    config_path = sys.argv[1]
+    if _is_dpo_config(config_path):
+        from foundry.train_dpo import train_dpo
+
+        train_dpo(config_path)
+    else:
+        train(config_path)
