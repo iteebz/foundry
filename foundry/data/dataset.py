@@ -1,6 +1,7 @@
 """PyTorch Datasets for token data with auto-detection and mixture sampling."""
 
 import hashlib
+import json
 from pathlib import Path
 
 import numpy as np
@@ -214,3 +215,78 @@ class MixtureDataset(Dataset):
         else:
             self.seed += 1
         self.indices = self._build_mixture_schedule()
+
+
+class PreferenceDataset(Dataset):
+    """Dataset for DPO training from JSONL preference pairs."""
+
+    def __init__(
+        self,
+        data_path: str | Path,
+        tokenizer,
+        max_length: int = 512,
+    ):
+        self.data_path = Path(data_path)
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+
+        self.pairs = []
+        with self.data_path.open() as f:
+            for line in f:
+                self.pairs.append(json.loads(line))
+
+    def __len__(self):
+        return len(self.pairs)
+
+    def __getitem__(self, idx):
+        pair = self.pairs[idx]
+        prompt = pair["prompt"]
+        chosen = pair["chosen"]
+        rejected = pair["rejected"]
+
+        prompt_ids = self.tokenizer.encode(prompt)
+        chosen_ids = self.tokenizer.encode(chosen)
+        rejected_ids = self.tokenizer.encode(rejected)
+
+        chosen_full = prompt_ids + chosen_ids
+        rejected_full = prompt_ids + rejected_ids
+
+        chosen_full = chosen_full[: self.max_length]
+        rejected_full = rejected_full[: self.max_length]
+
+        prompt_len = len(prompt_ids)
+
+        return {
+            "chosen_ids": torch.tensor(chosen_full, dtype=torch.long),
+            "rejected_ids": torch.tensor(rejected_full, dtype=torch.long),
+            "prompt_len": prompt_len,
+        }
+
+
+def collate_preference_batch(batch):
+    """Collate preference pairs with padding."""
+    max_chosen = max(item["chosen_ids"].size(0) for item in batch)
+    max_rejected = max(item["rejected_ids"].size(0) for item in batch)
+
+    chosen_ids = torch.zeros(len(batch), max_chosen, dtype=torch.long)
+    rejected_ids = torch.zeros(len(batch), max_rejected, dtype=torch.long)
+    chosen_mask = torch.zeros(len(batch), max_chosen, dtype=torch.bool)
+    rejected_mask = torch.zeros(len(batch), max_rejected, dtype=torch.bool)
+    prompt_lens = []
+
+    for i, item in enumerate(batch):
+        c_len = item["chosen_ids"].size(0)
+        r_len = item["rejected_ids"].size(0)
+        chosen_ids[i, :c_len] = item["chosen_ids"]
+        rejected_ids[i, :r_len] = item["rejected_ids"]
+        chosen_mask[i, :c_len] = True
+        rejected_mask[i, :r_len] = True
+        prompt_lens.append(item["prompt_len"])
+
+    return {
+        "chosen_ids": chosen_ids,
+        "rejected_ids": rejected_ids,
+        "chosen_mask": chosen_mask,
+        "rejected_mask": rejected_mask,
+        "prompt_lens": torch.tensor(prompt_lens, dtype=torch.long),
+    }

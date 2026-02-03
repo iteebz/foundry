@@ -68,3 +68,59 @@ def test_dpo_loss_prefers_chosen():
     loss_low = dpo(policy_chosen_low, policy_rejected_high, reference_chosen, reference_rejected)
 
     assert loss_high < loss_low
+
+
+def test_preference_dataset(tmp_path):
+    """PreferenceDataset loads JSONL correctly."""
+    import json
+
+    from foundry.data.dataset import PreferenceDataset
+
+    data_path = tmp_path / "prefs.jsonl"
+    pairs = [
+        {"prompt": "Hello", "chosen": " world", "rejected": " there"},
+        {"prompt": "How are", "chosen": " you?", "rejected": " they?"},
+    ]
+    with data_path.open("w") as f:
+        for p in pairs:
+            f.write(json.dumps(p) + "\n")
+
+    class MockTokenizer:
+        def encode(self, text):
+            return [ord(c) for c in text]
+
+    dataset = PreferenceDataset(data_path, MockTokenizer(), max_length=32)
+    assert len(dataset) == 2
+
+    item = dataset[0]
+    assert "chosen_ids" in item
+    assert "rejected_ids" in item
+    assert "prompt_len" in item
+
+
+def test_collate_preference_batch(tmp_path):
+    """Collate function pads correctly."""
+    import json
+
+    from foundry.data.dataset import PreferenceDataset, collate_preference_batch
+
+    data_path = tmp_path / "prefs.jsonl"
+    pairs = [
+        {"prompt": "A", "chosen": "BC", "rejected": "D"},
+        {"prompt": "EF", "chosen": "G", "rejected": "HIJK"},
+    ]
+    with data_path.open("w") as f:
+        for p in pairs:
+            f.write(json.dumps(p) + "\n")
+
+    class MockTokenizer:
+        def encode(self, text):
+            return [ord(c) for c in text]
+
+    dataset = PreferenceDataset(data_path, MockTokenizer(), max_length=32)
+    batch = collate_preference_batch([dataset[0], dataset[1]])
+
+    assert batch["chosen_ids"].shape[0] == 2
+    assert batch["rejected_ids"].shape[0] == 2
+    assert batch["chosen_mask"].shape == batch["chosen_ids"].shape
+    assert batch["prompt_lens"].shape == (2,)

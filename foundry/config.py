@@ -72,6 +72,15 @@ class WandbConfig:
     run_name: str = "run"
 
 
+@dataclass
+class DPOConfig:
+    enabled: bool = False
+    beta: float = 0.1
+    label_smoothing: float = 0.0
+    reference_model: str | None = None
+    preference_data: str | None = None
+
+
 class ConfigFrozenError(Exception):
     """Raised when attempting to modify a frozen config."""
 
@@ -85,6 +94,7 @@ class RunConfig:
     training: TrainingConfig = field(default_factory=TrainingConfig)
     lora: LoRAConfig = field(default_factory=LoRAConfig)
     wandb: WandbConfig = field(default_factory=WandbConfig)
+    dpo: DPOConfig = field(default_factory=DPOConfig)
     metadata: dict = field(default_factory=dict)
     _frozen: bool = field(default=False, repr=False)
 
@@ -129,6 +139,9 @@ class RunConfig:
         wandb_args = raw.get("wandb", {})
         wandb_config = WandbConfig(**wandb_args)
 
+        dpo_args = raw.get("dpo", {})
+        dpo_config = DPOConfig(**dpo_args)
+
         metadata = raw.get("_metadata", {})
 
         run_id = raw.get("run_id", uuid.uuid4().hex[:8])
@@ -141,6 +154,7 @@ class RunConfig:
             training=training_config,
             lora=lora_config,
             wandb=wandb_config,
+            dpo=dpo_config,
             metadata=metadata,
         )
         config.validate()
@@ -160,6 +174,7 @@ class RunConfig:
 
         lora_config = LoRAConfig(**raw.get("lora", {}))
         wandb_config = WandbConfig(**raw.get("wandb", {}))
+        dpo_config = DPOConfig(**raw.get("dpo", {}))
 
         return cls(
             name=raw.get("name", "unknown"),
@@ -169,6 +184,7 @@ class RunConfig:
             training=training_config,
             lora=lora_config,
             wandb=wandb_config,
+            dpo=dpo_config,
             metadata=raw.get("_metadata", {}),
         )
 
@@ -247,6 +263,13 @@ class RunConfig:
                 "enabled": self.wandb.enabled,
                 "project": self.wandb.project,
                 "run_name": self.wandb.run_name,
+            },
+            "dpo": {
+                "enabled": self.dpo.enabled,
+                "beta": self.dpo.beta,
+                "label_smoothing": self.dpo.label_smoothing,
+                "reference_model": self.dpo.reference_model,
+                "preference_data": self.dpo.preference_data,
             },
             "_metadata": self.metadata,
         }
