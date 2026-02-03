@@ -1,0 +1,237 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{xcolor}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  backgroundcolor=\color{gray!10}
+}
+
+\title{Foundry: Systematic Ablation for Sample-Efficient Transformer Research}
+\author{Space OS Research}
+\date{February 2026}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+We present Foundry, an open-source framework for systematic ablation studies in transformer architecture research. Unlike ad-hoc experimentation where multiple variables change simultaneously, Foundry enforces controlled single-variable mutations with full provenance tracking, enabling rigorous comparison of architectural choices. The framework implements 21 mutation types across architecture, training, and data dimensions, with an evaluation harness that ranks variants by downstream capability rather than loss. We describe the methodology, discuss validity conditions, and outline the autonomous iteration loop that enables efficient architecture search without human intervention.
+\end{abstract}
+
+\section{Introduction}
+
+Sample efficiency---capability gained per training token---is the limiting factor for small-scale transformer research. A 10\% improvement in tokens-to-capability translates directly to 10\% less compute for equivalent performance. Yet most architecture comparisons in the literature conflate multiple changes: a ``better'' attention mechanism often arrives with different hyperparameters, training schedules, or data processing.
+
+Foundry addresses this by enforcing methodological rigor: every comparison isolates a single variable. The mutation system generates configuration variants that differ from a baseline in exactly one dimension, while provenance tracking maintains full lineage for multi-hop comparisons.
+
+The key insight is that \textit{capability tasks}, not loss, should determine architectural rankings. A model with higher validation loss but stronger downstream performance on reasoning, knowledge, or code generation is the better model. Foundry's evaluation harness implements this principle.
+
+\section{Methodology}
+
+\subsection{Controlled Ablation}
+
+Every experiment isolates a single variable. The mutation system enforces this constraint:
+
+\begin{lstlisting}
+baseline.yaml -> mutate attention mla -> mla.yaml
+\end{lstlisting}
+
+The resulting configuration differs from baseline in exactly one field. Mutations are typed into three categories:
+
+\begin{itemize}
+  \item \textbf{Architecture} (17 types): attention variants (GQA, MLA, MoE, sparse, sliding window), normalization (RMSNorm, LayerNorm), activation (SwiGLU, GELU, GLU), position encoding (RoPE, ALiBi), loss functions (CrossEntropy, Focal, LabelSmoothing, DPO), depth/width scaling
+  \item \textbf{Training} (8 types): learning rate, batch size, warmup, gradient clipping, weight decay, Adam betas, LoRA rank/alpha/dropout
+  \item \textbf{Data} (2 types): conversation formats (ChatML, Llama3, Alpaca)
+\end{itemize}
+
+\subsection{Fixed Seeds and Data}
+
+All experiments share:
+\begin{itemize}
+  \item Deterministic seed (\texttt{seed: 1337})
+  \item Identical data order via deterministic dataloading
+  \item Identical evaluation conditions (samples, temperature, device)
+\end{itemize}
+
+This eliminates variance from randomness, isolating architecture as the only free variable.
+
+\subsection{Provenance Tracking}
+
+Every mutation records lineage:
+
+\begin{lstlisting}
+_metadata:
+  parent_config: "experiments/baseline.yaml"
+  mutation_type: "attention"
+  variant: "mla"
+  generation: 1
+  timestamp: "2026-02-03T12:00:00"
+\end{lstlisting}
+
+Lineage enables multi-hop comparisons: if MLA beats GQA and GQA beats MHA, transitive inference is justified by shared ancestry.
+
+\section{Evaluation}
+
+\subsection{Capability Tasks over Loss}
+
+Loss is a proxy. Capabilities are the target. The evaluation harness implements:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lll}
+\toprule
+Task & Metric & Measures \\
+\midrule
+GSM8K & accuracy & Mathematical reasoning \\
+MMLU & accuracy & Factual knowledge \\
+HumanEval & pass@1 & Code generation \\
+Constitution & preference\_accuracy & Alignment \\
+\bottomrule
+\end{tabular}
+\caption{Capability evaluation tasks}
+\end{table}
+
+Aggregate score: arithmetic mean across tasks. Simple, interpretable, no hyperparameters.
+
+\subsection{Ranking Logic}
+
+Sweeps rank by capability task when specified:
+
+\begin{lstlisting}
+python -m foundry.cli.sweep attention mla gqa \
+  --eval-task gsm8k --promote
+\end{lstlisting}
+
+Without eval task, rank by validation loss. Higher capability score wins; lower loss wins.
+
+\section{Autonomous Iteration}
+
+The core loop:
+
+\begin{lstlisting}
+mutate -> train -> evaluate -> promote -> repeat
+\end{lstlisting}
+
+The \texttt{--promote} flag enables fully autonomous evolution: winner replaces baseline, next sweep uses new baseline as parent. No human in the loop until compute runs out.
+
+\subsection{Convergence}
+
+The loop terminates when:
+\begin{enumerate}
+  \item No mutation beats baseline (local optimum)
+  \item Improvement falls below threshold (diminishing returns)
+  \item Compute budget exhausted
+\end{enumerate}
+
+In practice, 3--5 generations of sweeps typically exhaust easy wins.
+
+\section{Validity Conditions}
+
+\subsection{Fair Comparison Requirements}
+
+\begin{enumerate}
+  \item \textbf{Same compute budget}: Identical \texttt{max\_iters} and \texttt{batch\_size}
+  \item \textbf{Same data exposure}: Identical dataset and order
+  \item \textbf{Same evaluation}: Same eval samples, same extraction logic
+  \item \textbf{Isolated change}: One mutation per config
+\end{enumerate}
+
+Violations invalidate comparison. The mutation system prevents most violations by construction.
+
+\subsection{Scope Limitations}
+
+Foundry cannot answer:
+
+\begin{itemize}
+  \item \textbf{Scaling laws}: Behavior at 10M parameters doesn't prove behavior at 70B
+  \item \textbf{Data efficiency trade-offs}: Same data, so data quality effects are fixed
+  \item \textbf{Training stability at scale}: Small models don't hit the same loss spikes
+  \item \textbf{Inference optimization}: Foundry measures training efficiency only
+\end{itemize}
+
+These require larger-scale experiments outside Foundry's scope.
+
+\section{Statistical Considerations}
+
+\subsection{Single Runs}
+
+Current design uses single runs (no replication). This is a deliberate compute-efficiency trade-off:
+
+\begin{itemize}
+  \item \textbf{Risk}: Variance may obscure true effect
+  \item \textbf{Mitigation}: Fixed seeds reduce variance; large effects are robust
+\end{itemize}
+
+For high-stakes comparisons, multiple seeds are recommended.
+
+\subsection{Effect Size}
+
+Small differences ($<$1\% accuracy) are noise. Report effects worth acting on:
+
+\begin{itemize}
+  \item \textbf{Meaningful}: $\geq$5\% accuracy delta
+  \item \textbf{Marginal}: 2--5\% (worth noting, not decisive)
+  \item \textbf{Noise}: $<$2\% (rerun with more seeds)
+\end{itemize}
+
+\section{Reference Implementation}
+
+The baseline architecture represents consensus best practices (Llama-style) scaled to research-viable size:
+
+\begin{lstlisting}
+model_args:
+  attention_type: "gqa"
+  n_kv_head: 2
+  norm_type: "rmsnorm"
+  activation: "swiglu"
+  position_encoding: "rope"
+  n_layer: 6
+  n_head: 6
+  n_embd: 384
+\end{lstlisting}
+
+Approximately 10M parameters. This choice trades ecological validity for iteration speed: full sweeps complete in minutes, not days.
+
+The baseline evolves as mutations win and get promoted, implementing evolutionary architecture search.
+
+\section{Related Work}
+
+Neural architecture search (NAS) methods typically optimize over a continuous or discrete search space using reinforcement learning \cite{zoph2016neural}, evolutionary algorithms \cite{real2019regularized}, or differentiable relaxations \cite{liu2018darts}. These methods focus on discovering novel architectures.
+
+Foundry takes a complementary approach: systematic comparison of \textit{known} architectural variants under controlled conditions. The goal is not discovery but rigorous validation---understanding which components contribute to sample efficiency and why.
+
+Ablation studies are standard practice in deep learning research, but often conducted ad-hoc with multiple simultaneous changes. Foundry formalizes ablation as a first-class methodology with tooling support.
+
+\section{Future Work}
+
+Empirical validation across the mutation space remains future work. Initial priorities:
+
+\begin{enumerate}
+  \item Attention variants (GQA vs MLA vs MoE) on GSM8K
+  \item Normalization impact (RMSNorm vs LayerNorm) on training stability
+  \item Position encoding comparison (RoPE vs ALiBi) on long-context tasks
+\end{enumerate}
+
+Scaling experiments beyond 10M parameters will test whether small-scale rankings transfer.
+
+\section{Conclusion}
+
+Foundry provides methodological infrastructure for rigorous transformer ablation studies. By enforcing single-variable mutations, tracking provenance, and ranking by capability rather than loss, the framework enables systematic architecture comparison. The autonomous iteration loop further enables efficient search without human intervention.
+
+The framework is open source and available at \url{https://github.com/space-os/foundry}.
+
+\begin{thebibliography}{9}
+\bibitem{zoph2016neural} Zoph, B., \& Le, Q. V. (2016). Neural architecture search with reinforcement learning. arXiv preprint arXiv:1611.01578.
+\bibitem{real2019regularized} Real, E., Aggarwal, A., Huang, Y., \& Le, Q. V. (2019). Regularized evolution for image classifier architecture search. In AAAI.
+\bibitem{liu2018darts} Liu, H., Simonyan, K., \& Yang, Y. (2018). DARTS: Differentiable architecture search. arXiv preprint arXiv:1806.09055.
+\end{thebibliography}
+
+\end{document}
