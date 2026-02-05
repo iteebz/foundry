@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import inspect
 import math
 from dataclasses import dataclass
@@ -20,150 +22,6 @@ from foundry.modules.rope import RotaryEmbedding, apply_rotary_emb
 from foundry.modules.sliding_window import SlidingWindowMask
 from foundry.modules.sparse_attention import SparseAttentionMask
 from foundry.modules.swiglu import SwiGLU
-
-
-def _build_norm(config) -> nn.Module:
-    """Build normalization layer from config."""
-    if config.norm_type == "layernorm":
-        return LayerNorm(config.n_embd, bias=config.bias)
-    return RMSNorm(config.n_embd)
-
-
-class CausalSelfAttention(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.n_head = config.n_head
-        self.n_kv_head = config.n_kv_head
-        self.n_embd = config.n_embd
-        self.head_dim = config.n_embd // config.n_head
-        self.use_rope = config.position_encoding == "rope"
-        self.use_alibi = config.position_encoding == "alibi"
-        self.use_mla = config.attention_type == "mla"
-        self.use_sliding_window = config.sliding_window_size is not None
-        self.use_sparse = config.sparse_block_size is not None
-
-        if self.use_mla:
-            self.mla = MultiLatentAttention(
-                config.n_embd,
-                config.n_head,
-                latent_dim=config.mla_latent_dim,
-                bias=config.bias,
-                dropout=config.dropout,
-                block_size=config.block_size,
-            )
-        else:
-            self.gqa = GroupedQueryAttention(
-                config.n_embd,
-                config.n_head,
-                config.n_kv_head,
-                bias=config.bias,
-                dropout=config.dropout,
-            )
-
-            if self.use_rope:
-                self.rope = RotaryEmbedding(self.head_dim, max_seq_len=config.block_size)
-            elif self.use_alibi:
-                self.alibi = ALiBi(config.n_head, max_seq_len=config.block_size)
-
-            if self.use_sliding_window:
-                self.sliding_window = SlidingWindowMask(
-                    config.sliding_window_size, max_seq_len=config.block_size
-                )
-
-            if self.use_sparse:
-                self.sparse = SparseAttentionMask(
-                    block_size=config.sparse_block_size,
-                    stride=config.sparse_stride,
-                    max_seq_len=config.block_size,
-                )
-
-    def _apply_mask(self, position_bias, mask):
-        """Combine position bias with attention mask."""
-        return position_bias * mask if position_bias is not None else mask
-
-    def forward(self, x):
-        if self.use_mla:
-            return self.mla(x)
-
-        B, T, C = x.size()
-
-        q = self.gqa.q_proj(x).view(B, T, self.n_head, self.head_dim).transpose(1, 2)
-        k = self.gqa.k_proj(x).view(B, T, self.n_kv_head, self.head_dim).transpose(1, 2)
-        v = self.gqa.v_proj(x).view(B, T, self.n_kv_head, self.head_dim).transpose(1, 2)
-
-        position_bias = None
-        if self.use_rope:
-            cos, sin = self.rope(x, T)
-            cos = cos.unsqueeze(0).unsqueeze(1)
-            sin = sin.unsqueeze(0).unsqueeze(1)
-            q, k = apply_rotary_emb(q, k, cos, sin)
-        elif self.use_alibi:
-            position_bias = self.alibi(T)
-
-        k = k.repeat_interleave(self.gqa.n_rep, dim=1)
-        v = v.repeat_interleave(self.gqa.n_rep, dim=1)
-
-        is_causal = True
-        if self.use_sliding_window:
-            position_bias = self._apply_mask(position_bias, self.sliding_window(T))
-            is_causal = False
-        elif self.use_sparse:
-            position_bias = self._apply_mask(position_bias, self.sparse(T))
-            is_causal = False
-
-        y = F.scaled_dot_product_attention(
-            q,
-            k,
-            v,
-            attn_mask=position_bias,
-            dropout_p=self.gqa.attn_dropout.p if self.training else 0.0,
-            is_causal=is_causal,
-        )
-
-        y = y.transpose(1, 2).contiguous().view(B, T, C)
-        return self.gqa.resid_dropout(self.gqa.o_proj(y))
-
-
-class Block(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.ln_1 = _build_norm(config)
-        self.attn = CausalSelfAttention(config)
-        self.ln_2 = _build_norm(config)
-
-        if config.mlp_type == "moe":
-            self.mlp = MoELayer(
-                config.n_embd,
-                n_experts=config.moe_n_experts,
-                top_k=config.moe_top_k,
-                bias=config.bias,
-                dropout=config.dropout,
-            )
-        else:
-            activation_map = {
-                "swiglu": SwiGLU,
-                "gelu": GELU,
-                "glu": GLU,
-            }
-            act_cls = activation_map.get(config.activation, SwiGLU)
-            self.mlp = act_cls(config.n_embd, bias=config.bias)
-
-    def forward(self, x):
-        if (
-            hasattr(self.config, "gradient_checkpointing")
-            and self.config.gradient_checkpointing
-            and self.training
-        ):
-            from torch.utils.checkpoint import checkpoint
-
-            x = x + checkpoint(self.attn, self.ln_1(x), use_reentrant=False)
-            x = x + checkpoint(self.mlp, self.ln_2(x), use_reentrant=False)
-        else:
-            x = x + self.attn(self.ln_1(x))
-            x = x + self.mlp(self.ln_2(x))
-        return x
 
 
 @dataclass
@@ -190,8 +48,7 @@ class GPTConfig:
     sparse_stride: int | None = None
     gradient_checkpointing: bool = False
 
-    def __post_init__(self):
-        """Validate config parameters."""
+    def __post_init__(self) -> None:
         if self.n_embd % self.n_head != 0:
             raise ValueError(f"n_embd ({self.n_embd}) must be divisible by n_head ({self.n_head})")
 
@@ -239,65 +96,206 @@ class GPTConfig:
             raise ValueError(f"Unknown mlp_type: {self.mlp_type}")
 
 
-class GPT(nn.Module):
-    def __init__(self, config):
+def _build_norm(config: GPTConfig) -> LayerNorm | RMSNorm:
+    if config.norm_type == "layernorm":
+        return LayerNorm(config.n_embd, bias=config.bias)
+    return RMSNorm(config.n_embd)
+
+
+class CausalSelfAttention(nn.Module):
+    def __init__(self, config: GPTConfig) -> None:
         super().__init__()
-        assert config.vocab_size is not None
-        assert config.block_size is not None
+        self.config = config
+        self.n_head = config.n_head
+        self.n_kv_head = config.n_kv_head
+        self.n_embd = config.n_embd
+        self.head_dim = config.n_embd // config.n_head
+        self.use_rope = config.position_encoding == "rope"
+        self.use_alibi = config.position_encoding == "alibi"
+        self.use_mla = config.attention_type == "mla"
+        self.use_sliding_window = config.sliding_window_size is not None
+        self.use_sparse = config.sparse_block_size is not None
+
+        self.mla: MultiLatentAttention | None = None
+        self.gqa: GroupedQueryAttention | None = None
+        self.rope: RotaryEmbedding | None = None
+        self.alibi: ALiBi | None = None
+        self.sliding_window: SlidingWindowMask | None = None
+        self.sparse: SparseAttentionMask | None = None
+
+        if self.use_mla:
+            self.mla = MultiLatentAttention(
+                config.n_embd,
+                config.n_head,
+                latent_dim=config.mla_latent_dim,
+                bias=config.bias,
+                dropout=config.dropout,
+                block_size=config.block_size,
+            )
+        else:
+            self.gqa = GroupedQueryAttention(
+                config.n_embd,
+                config.n_head,
+                config.n_kv_head,
+                bias=config.bias,
+                dropout=config.dropout,
+            )
+
+            if self.use_rope:
+                self.rope = RotaryEmbedding(self.head_dim, max_seq_len=config.block_size)
+            elif self.use_alibi:
+                self.alibi = ALiBi(config.n_head, max_seq_len=config.block_size)
+
+            if self.use_sliding_window and config.sliding_window_size is not None:
+                self.sliding_window = SlidingWindowMask(
+                    config.sliding_window_size, max_seq_len=config.block_size
+                )
+
+            if self.use_sparse and config.sparse_block_size is not None:
+                self.sparse = SparseAttentionMask(
+                    block_size=config.sparse_block_size,
+                    stride=config.sparse_stride or config.sparse_block_size,
+                    max_seq_len=config.block_size,
+                )
+
+    def _apply_mask(self, position_bias: torch.Tensor | None, mask: torch.Tensor) -> torch.Tensor:
+        return position_bias * mask if position_bias is not None else mask
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.mla is not None:
+            return self.mla(x)
+
+        assert self.gqa is not None
+        B, T, C = x.size()
+
+        q = self.gqa.q_proj(x).view(B, T, self.n_head, self.head_dim).transpose(1, 2)
+        k = self.gqa.k_proj(x).view(B, T, self.n_kv_head, self.head_dim).transpose(1, 2)
+        v = self.gqa.v_proj(x).view(B, T, self.n_kv_head, self.head_dim).transpose(1, 2)
+
+        position_bias: torch.Tensor | None = None
+        if self.rope is not None:
+            cos, sin = self.rope(x, T)
+            cos = cos.unsqueeze(0).unsqueeze(1)
+            sin = sin.unsqueeze(0).unsqueeze(1)
+            q, k = apply_rotary_emb(q, k, cos, sin)
+        elif self.alibi is not None:
+            position_bias = self.alibi(T)
+
+        k = k.repeat_interleave(self.gqa.n_rep, dim=1)
+        v = v.repeat_interleave(self.gqa.n_rep, dim=1)
+
+        is_causal = True
+        if self.sliding_window is not None:
+            position_bias = self._apply_mask(position_bias, self.sliding_window(T))
+            is_causal = False
+        elif self.sparse is not None:
+            position_bias = self._apply_mask(position_bias, self.sparse(T))
+            is_causal = False
+
+        y = F.scaled_dot_product_attention(
+            q,
+            k,
+            v,
+            attn_mask=position_bias,
+            dropout_p=self.gqa.attn_dropout.p if self.training else 0.0,
+            is_causal=is_causal,
+        )
+
+        y = y.transpose(1, 2).contiguous().view(B, T, C)
+        return self.gqa.resid_dropout(self.gqa.o_proj(y))
+
+
+class Block(nn.Module):
+    def __init__(self, config: GPTConfig) -> None:
+        super().__init__()
+        self.config = config
+        self.ln_1 = _build_norm(config)
+        self.attn = CausalSelfAttention(config)
+        self.ln_2 = _build_norm(config)
+
+        self.mlp: MoELayer | SwiGLU | GELU | GLU
+        if config.mlp_type == "moe":
+            self.mlp = MoELayer(
+                config.n_embd,
+                n_experts=config.moe_n_experts,
+                top_k=config.moe_top_k,
+                bias=config.bias,
+                dropout=config.dropout,
+            )
+        else:
+            activation_map: dict[str, type[SwiGLU] | type[GELU] | type[GLU]] = {
+                "swiglu": SwiGLU,
+                "gelu": GELU,
+                "glu": GLU,
+            }
+            act_cls = activation_map.get(config.activation, SwiGLU)
+            self.mlp = act_cls(config.n_embd, bias=config.bias)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.config.gradient_checkpointing and self.training:
+            from torch.utils.checkpoint import checkpoint as ckpt
+
+            def attn_fn(t: torch.Tensor) -> torch.Tensor:
+                return self.attn(self.ln_1(t))
+
+            def mlp_fn(t: torch.Tensor) -> torch.Tensor:
+                return self.mlp(self.ln_2(t))
+
+            attn_out = ckpt(attn_fn, x, use_reentrant=False)
+            mlp_out = ckpt(mlp_fn, x + attn_out, use_reentrant=False)
+            return x + attn_out + mlp_out
+            x = x + self.attn(self.ln_1(x))
+            x = x + self.mlp(self.ln_2(x))
+        return x
+
+
+class GPT(nn.Module):
+    def __init__(self, config: GPTConfig) -> None:
+        super().__init__()
         self.config = config
 
-        loss_map = {
+        loss_map: dict[str, FocalLoss | LabelSmoothingCrossEntropy | None] = {
             "cross_entropy": None,
             "focal": FocalLoss(),
             "label_smoothing": LabelSmoothingCrossEntropy(),
         }
         self.loss_fn = loss_map.get(config.loss_type)
 
-        norm_cls = LayerNorm if config.norm_type == "layernorm" else RMSNorm
-        final_norm = (
-            norm_cls(config.n_embd, bias=config.bias)
-            if config.norm_type == "layernorm"
-            else norm_cls(config.n_embd)
-        )
-
-        self.transformer = nn.ModuleDict(
-            {
-                "wte": nn.Embedding(config.vocab_size, config.n_embd),
-                "drop": nn.Dropout(config.dropout),
-                "h": nn.ModuleList([Block(config) for _ in range(config.n_layer)]),
-                "ln_f": final_norm,
-            }
-        )
+        self.wte = nn.Embedding(config.vocab_size, config.n_embd)
+        self.drop = nn.Dropout(config.dropout)
+        self.blocks = nn.ModuleList([Block(config) for _ in range(config.n_layer)])
+        self.ln_f = _build_norm(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
-        self.transformer.wte.weight = self.lm_head.weight
+        self.wte.weight = self.lm_head.weight
 
         self.apply(self._init_weights)
         for pn, p in self.named_parameters():
             if pn.endswith(("w2.weight", "o_proj.weight")):
                 torch.nn.init.normal_(p, mean=0.0, std=0.02 / math.sqrt(2 * config.n_layer))
 
-    def get_num_params(self, non_embedding=True):
+    def get_num_params(self, non_embedding: bool = True) -> int:
         return sum(p.numel() for p in self.parameters())
 
-    def _init_weights(self, module):
+    def _init_weights(self, module: nn.Module) -> None:
         if isinstance(module, nn.Linear):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
             if module.bias is not None:
-                torch.nn.init.zeros_(module.bias)
+                torch.nn.init.zeros_(module.bias)  # pyright: ignore[reportUnnecessaryComparison]
         elif isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
-    def forward(self, idx, targets=None):
+    def forward(
+        self, idx: torch.Tensor, targets: torch.Tensor | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         _b, t = idx.size()
         assert t <= self.config.block_size, (
             f"Cannot forward sequence of length {t}, block size is only {self.config.block_size}"
         )
 
-        tok_emb = self.transformer.wte(idx)
-        x = self.transformer.drop(tok_emb)
-        for block in self.transformer.h:
+        x = self.drop(self.wte(idx))
+        for block in self.blocks:
             x = block(x)
-        x = self.transformer.ln_f(x)
+        x = self.ln_f(x)
 
         if targets is not None:
             logits = self.lm_head(x)
@@ -313,38 +311,41 @@ class GPT(nn.Module):
 
         return logits, loss
 
-    def configure_optimizers(self, weight_decay, learning_rate, betas, device_type):
-        param_dict = dict(self.named_parameters())
-        param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}
-        decay_params = [p for n, p in param_dict.items() if p.dim() >= 2]
-        nodecay_params = [p for n, p in param_dict.items() if p.dim() < 2]
+    def configure_optimizers(
+        self, weight_decay: float, learning_rate: float, betas: tuple[float, float], device_type: str
+    ) -> torch.optim.AdamW:
+        param_dict = {pn: p for pn, p in self.named_parameters() if p.requires_grad}
+        decay_params = [p for p in param_dict.values() if p.dim() >= 2]
+        nodecay_params = [p for p in param_dict.values() if p.dim() < 2]
         optim_groups = [
             {"params": decay_params, "weight_decay": weight_decay},
             {"params": nodecay_params, "weight_decay": 0.0},
         ]
-        sum(p.numel() for p in decay_params)
-        sum(p.numel() for p in nodecay_params)
         fused_available = "fused" in inspect.signature(torch.optim.AdamW).parameters
         use_fused = fused_available and device_type == "cuda"
         extra_args = {"fused": True} if use_fused else {}
         return torch.optim.AdamW(optim_groups, lr=learning_rate, betas=betas, **extra_args)
 
-    def crop_block_size(self, block_size):
+    def crop_block_size(self, block_size: int) -> None:
         assert block_size <= self.config.block_size
         self.config.block_size = block_size
-        for block in self.transformer.h:
-            if hasattr(block.attn, "rope"):
-                block.attn.rope.max_seq_len = block_size
-            elif hasattr(block.attn, "alibi"):
-                block.attn.alibi.max_seq_len = block_size
+        for i in range(len(self.blocks)):
+            blk = self.blocks[i]
+            assert isinstance(blk, Block)
+            if blk.attn.rope is not None:
+                blk.attn.rope.max_seq_len = block_size
+            elif blk.attn.alibi is not None:
+                blk.attn.alibi.max_seq_len = block_size
 
     @classmethod
-    def from_pretrained(cls, model_type, override_args=None):
+    def from_pretrained(
+        cls, model_type: str, override_args: dict[str, object] | None = None
+    ) -> GPT:
         raise NotImplementedError(
             "model_v2 doesn't support pretrained loading (no learned pos embeddings)"
         )
 
-    def estimate_mfu(self, fwdbwd_per_iter, dt):
+    def estimate_mfu(self, fwdbwd_per_iter: int, dt: float) -> float:
         N = self.get_num_params()
         cfg = self.config
         L, H, Q, T = cfg.n_layer, cfg.n_head, cfg.n_embd // cfg.n_head, cfg.block_size
@@ -355,8 +356,10 @@ class GPT(nn.Module):
         flops_promised = 312e12
         return flops_achieved / flops_promised
 
-    @torch.no_grad()
-    def generate(self, idx, max_new_tokens, temperature=1.0, top_k=None):
+    @torch.inference_mode()
+    def generate(
+        self, idx: torch.Tensor, max_new_tokens: int, temperature: float = 1.0, top_k: int | None = None
+    ) -> torch.Tensor:
         for _ in range(max_new_tokens):
             idx_cond = (
                 idx if idx.size(1) <= self.config.block_size else idx[:, -self.config.block_size :]

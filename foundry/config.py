@@ -104,7 +104,7 @@ class RunConfig:
     lora: LoRAConfig = field(default_factory=LoRAConfig)
     wandb: WandbConfig = field(default_factory=WandbConfig)
     dpo: DPOConfig = field(default_factory=DPOConfig)
-    metadata: dict = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     _frozen: bool = field(default=False, repr=False)
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -174,7 +174,7 @@ class RunConfig:
         return config.freeze()
 
     @classmethod
-    def from_dict(cls, raw: dict) -> "RunConfig":
+    def from_dict(cls, raw: dict[str, Any]) -> "RunConfig":
         """Load configuration from dictionary (e.g., checkpoint)."""
         model_config = GPTConfig(**raw.get("model_args", {}))
 
@@ -205,7 +205,7 @@ class RunConfig:
             metadata=raw.get("_metadata", {}),
         )
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "name": self.name,

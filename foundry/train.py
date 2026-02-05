@@ -1,5 +1,7 @@
 """Training script with RunConfig (v2 - clean refactor)."""
 
+from __future__ import annotations
+
 import math
 import pickle
 import signal
@@ -7,37 +9,40 @@ import sys
 import traceback
 from contextlib import nullcontext
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+import numpy as np
+import torch
+import yaml
+from torch.utils.data import DataLoader, RandomSampler
+from torch.utils.data.distributed import DistributedSampler
+
+from foundry.config import RunConfig
+from foundry.data.curriculum import get_curriculum_stage
+from foundry.data.dataset import CurriculumSampler, MixtureDataset, TokenDataset
+from foundry.distributed import (
+    cleanup_distributed,
+    init_distributed,
+    print_distributed_info,
+    wrap_model_distributed,
+)
+from foundry.eval import evaluate
+from foundry.metrics import MetricLogger
+from foundry.model import GPT
+
+if TYPE_CHECKING:
+    from types import FrameType
 
 
-def _sigint_handler(sig, frame):
+def _sigint_handler(sig: int, frame: FrameType | None) -> None:
     traceback.print_stack(frame)
     sys.exit(1)
 
 
 signal.signal(signal.SIGINT, _sigint_handler)
 
-import numpy as np  # noqa: E402
-import torch  # noqa: E402
-import yaml  # noqa: E402
-from torch.utils.data import DataLoader, RandomSampler  # noqa: E402
-from torch.utils.data.distributed import DistributedSampler  # noqa: E402
 
-from foundry.config import RunConfig  # noqa: E402
-from foundry.data.curriculum import get_curriculum_stage  # noqa: E402
-from foundry.data.dataset import CurriculumSampler, MixtureDataset, TokenDataset  # noqa: E402
-from foundry.distributed import (  # noqa: E402
-    cleanup_distributed,
-    init_distributed,
-    print_distributed_info,
-    wrap_model_distributed,
-)
-from foundry.eval import evaluate  # noqa: E402
-from foundry.metrics import MetricLogger  # noqa: E402
-from foundry.model import GPT  # noqa: E402
-
-
-def get_lr(it, config):
-    """Learning rate schedule with warmup and cosine decay."""
+def get_lr(it: int, config: RunConfig) -> float:
     if it < config.training.warmup_iters:
         return config.training.learning_rate * (it + 1) / (config.training.warmup_iters + 1)
     if it > config.training.lr_decay_iters:
@@ -50,24 +55,36 @@ def get_lr(it, config):
 
 
 class EMA:
-    """Exponential moving average of model parameters."""
-
-    def __init__(self, model, decay=0.9999):
+    def __init__(self, model: torch.nn.Module, decay: float = 0.9999) -> None:
         self.decay = decay
-        self.shadow = {k: v.clone().detach() for k, v in model.state_dict().items()}
+        self.shadow: dict[str, torch.Tensor] = {
+            k: v.clone().detach() for k, v in model.state_dict().items()
+        }
 
-    def update(self, model):
+    def update(self, model: torch.nn.Module) -> None:
         for k, v in model.state_dict().items():
             self.shadow[k].mul_(self.decay).add_(v, alpha=1 - self.decay)
 
-    def apply_shadow(self, model):
+    def apply_shadow(self, model: torch.nn.Module) -> None:
         for k, v in model.named_parameters():
             if k in self.shadow:
                 v.data.copy_(self.shadow[k])
 
 
-def train(config_path: str | Path):
-    """Main training loop."""
+Sampler = DistributedSampler[TokenDataset | MixtureDataset] | CurriculumSampler | RandomSampler
+
+
+def _set_sampler_epoch(sampler: Sampler, epoch: int) -> None:
+    if isinstance(sampler, (DistributedSampler, CurriculumSampler)):
+        sampler.set_epoch(epoch)
+
+
+def _set_sampler_stage(sampler: Sampler, stage: int) -> None:
+    if isinstance(sampler, CurriculumSampler):
+        sampler.set_stage(stage)
+
+
+def train(config_path: str | Path) -> None:
     config = RunConfig.from_yaml(Path(config_path))
 
     master_process, rank, world_size = init_distributed(backend="nccl")
@@ -84,6 +101,7 @@ def train(config_path: str | Path):
     metric_logger = MetricLogger(str(out_dir)) if master_process else None
 
     seed = config.training.seed
+    assert seed is not None
     torch.manual_seed(seed + rank)
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
@@ -118,12 +136,10 @@ def train(config_path: str | Path):
     meta_path = data_dir / "meta.pkl"
     if meta_path.exists():
         with meta_path.open("rb") as f:
-            meta = pickle.load(f)  # noqa: S301 - trusted internal checkpoint
+            meta = pickle.load(f)
         config.model.vocab_size = meta["vocab_size"]
-    elif config.model.vocab_size is None:
-        config.model.vocab_size = 50304
 
-    model = GPT(config.model)
+    model: GPT | torch.nn.Module = GPT(config.model)
     model.to(device)
 
     if config.lora.enabled:
@@ -136,6 +152,7 @@ def train(config_path: str | Path):
             lora_dropout=config.lora.lora_dropout,
         )
 
+    assert isinstance(model, GPT)
     scaler = torch.amp.GradScaler("cuda", enabled=(use_amp and dtype == "float16"))
     optimizer = model.configure_optimizers(
         config.training.weight_decay,
@@ -180,10 +197,12 @@ def train(config_path: str | Path):
 
     raw_model = model.module if (is_ddp or is_fsdp) else model
 
+    train_dataset: TokenDataset | MixtureDataset
+    val_dataset: TokenDataset | MixtureDataset
+
     if config.data.sources:
 
         def get_train_path(src_path: str) -> str:
-            """Infer train split path. Handles: foo.bin -> foo_train.bin, foo_val.bin -> foo_train.bin, foo_train.bin -> foo_train.bin"""
             p = Path(src_path)
             if p.stem.endswith("_train"):
                 return src_path
@@ -192,7 +211,6 @@ def train(config_path: str | Path):
             return str(p.parent / f"{p.stem}_train{p.suffix}")
 
         def get_val_path(src_path: str) -> str:
-            """Infer val split path. Handles: foo.bin -> foo_val.bin, foo_train.bin -> foo_val.bin, foo_val.bin -> foo_val.bin"""
             p = Path(src_path)
             if p.stem.endswith("_val"):
                 return src_path
@@ -218,6 +236,7 @@ def train(config_path: str | Path):
         val_dataset = TokenDataset(data_dir / "val.bin", block_size=config.data.block_size)
 
     use_curriculum = config.data.curriculum.enabled and world_size == 1
+    train_sampler: Sampler
     if world_size > 1:
         train_sampler = DistributedSampler(train_dataset, shuffle=True)
     elif use_curriculum:
@@ -231,10 +250,12 @@ def train(config_path: str | Path):
         train_sampler = RandomSampler(
             train_dataset, replacement=True, num_samples=len(train_dataset)
         )
-    val_sampler = DistributedSampler(val_dataset, shuffle=False) if world_size > 1 else None
+    val_sampler: DistributedSampler[TokenDataset | MixtureDataset] | None = (
+        DistributedSampler(val_dataset, shuffle=False) if world_size > 1 else None
+    )
 
     num_workers = 0 if device_type == "mps" else 4
-    train_loader = DataLoader(
+    train_loader: DataLoader[tuple[torch.Tensor, torch.Tensor]] = DataLoader(
         train_dataset,
         batch_size=config.data.batch_size,
         sampler=train_sampler,
@@ -242,7 +263,7 @@ def train(config_path: str | Path):
         pin_memory=(device_type == "cuda"),
         persistent_workers=(num_workers > 0),
     )
-    val_loader = DataLoader(
+    val_loader: DataLoader[tuple[torch.Tensor, torch.Tensor]] = DataLoader(
         val_dataset,
         batch_size=config.data.batch_size,
         sampler=val_sampler,
@@ -253,46 +274,44 @@ def train(config_path: str | Path):
     )
 
     @torch.no_grad()
-    def estimate_loss():
-        out = {}
+    def estimate_loss() -> dict[str, float]:
+        out: dict[str, float] = {}
         model.eval()
         for split, loader in [("train", train_loader), ("val", val_loader)]:
-            losses = []
-            for k, (X, Y) in enumerate(loader):
+            losses: list[float] = []
+            for k, (x, y) in enumerate(loader):
                 if k >= config.training.eval_iters:
                     break
-                X, Y = X.to(device), Y.to(device)
+                x, y = x.to(device), y.to(device)
                 with ctx:
-                    _logits, loss = model(X, Y)
+                    _logits, loss = model(x, y)
                 losses.append(loss.item())
-            out[split] = np.mean(losses)
+            out[split] = float(np.mean(losses))
         model.train()
         return out
 
     current_epoch = 0
-    last_gns = None
+    last_gns: float | None = None
     train_iter = iter(train_loader)
-    if hasattr(train_sampler, "set_epoch"):
-        train_sampler.set_epoch(current_epoch)
+    _set_sampler_epoch(train_sampler, current_epoch)
 
     total_epochs = max(1, config.training.max_iters // len(train_loader))
 
     while True:
         try:
-            X, Y = next(train_iter)
+            batch_x, batch_y = next(train_iter)
         except StopIteration:
             current_epoch += 1
-            if hasattr(train_sampler, "set_epoch"):
-                train_sampler.set_epoch(current_epoch)
+            _set_sampler_epoch(train_sampler, current_epoch)
             if use_curriculum:
                 new_stage = get_curriculum_stage(
                     current_epoch, total_epochs, config.data.curriculum.num_stages
                 )
-                train_sampler.set_stage(new_stage)
+                _set_sampler_stage(train_sampler, new_stage)
             train_iter = iter(train_loader)
-            X, Y = next(train_iter)
+            batch_x, batch_y = next(train_iter)
 
-        X, Y = X.to(device), Y.to(device)
+        batch_x, batch_y = batch_x.to(device), batch_y.to(device)
         lr = get_lr(iter_num, config) if config.training.decay_lr else config.training.learning_rate
         for param_group in optimizer.param_groups:
             param_group["lr"] = lr
@@ -300,7 +319,7 @@ def train(config_path: str | Path):
         if iter_num > 0 and iter_num % config.training.eval_interval == 0 and master_process:
             losses = estimate_loss()
 
-            metrics = {
+            metrics: dict[str, Any] = {
                 "iter": iter_num,
                 "train_loss": float(losses["train"]),
                 "val_loss": float(losses["val"]),
@@ -348,12 +367,12 @@ def train(config_path: str | Path):
             break
 
         sum_sq_grad_norms = 0.0
-        prev_grads = None
+        prev_grads: list[torch.Tensor | None] | None = None
         for micro_step in range(effective_grad_accum):
-            if is_ddp:
+            if is_ddp and hasattr(model, "require_backward_grad_sync"):
                 model.require_backward_grad_sync = micro_step == effective_grad_accum - 1
             with ctx:
-                _logits, loss = model(X, Y)
+                _logits, loss = model(batch_x, batch_y)
                 loss = loss / effective_grad_accum
 
             if not torch.isfinite(loss):
@@ -386,14 +405,13 @@ def train(config_path: str | Path):
 
             if micro_step < effective_grad_accum - 1:
                 try:
-                    X, Y = next(train_iter)
+                    batch_x, batch_y = next(train_iter)
                 except StopIteration:
                     current_epoch += 1
-                    if hasattr(train_sampler, "set_epoch"):
-                        train_sampler.set_epoch(current_epoch)
+                    _set_sampler_epoch(train_sampler, current_epoch)
                     train_iter = iter(train_loader)
-                    X, Y = next(train_iter)
-                X, Y = X.to(device), Y.to(device)
+                    batch_x, batch_y = next(train_iter)
+                batch_x, batch_y = batch_x.to(device), batch_y.to(device)
 
         if config.training.grad_clip != 0.0:
             scaler.unscale_(optimizer)
@@ -403,11 +421,13 @@ def train(config_path: str | Path):
             with torch.no_grad():
                 scale = scaler.get_scale() if dtype == "float16" else 1.0
                 acc_scale = 1.0 if config.training.grad_clip != 0.0 else scale
-                acc_norm_sq = sum(
-                    (p.grad.float() / acc_scale).pow(2).sum()
-                    for p in model.parameters()
-                    if p.grad is not None
-                ).item()
+                acc_norm_sq = float(
+                    sum(
+                        (p.grad.float() / acc_scale).pow(2).sum()
+                        for p in model.parameters()
+                        if p.grad is not None
+                    )
+                )
                 n = effective_grad_accum
                 last_gns = (sum_sq_grad_norms * n) / max(acc_norm_sq, 1e-8) - 1
 
@@ -427,7 +447,7 @@ def train(config_path: str | Path):
             break
 
     if master_process:
-        val_iter = ((X.to(device), Y.to(device)) for X, Y in val_loader)
+        val_iter = ((x.to(device), y.to(device)) for x, y in val_loader)
         evaluate(
             raw_model,
             val_iter,
