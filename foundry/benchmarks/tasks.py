@@ -2,6 +2,7 @@
 
 import json
 import re
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -27,19 +28,37 @@ def extract_answer(text: str, task_type: str = "math") -> str | None:
     return None
 
 
+def _load_data(
+    source: str | Path | Iterable[dict[str, Any]], max_samples: int | None = None
+) -> Iterator[dict[str, Any]]:
+    """Load data from path or iterator."""
+    if isinstance(source, (str, Path)):
+        path = Path(source)
+        if not path.exists():
+            return
+        with path.open() as f:
+            for i, line in enumerate(f):
+                if max_samples and i >= max_samples:
+                    break
+                yield json.loads(line)
+    else:
+        for i, item in enumerate(source):
+            if max_samples and i >= max_samples:
+                break
+            yield item
+
+
 def evaluate_gsm8k(
-    model, tokenizer, dataset_path: str | Path, max_samples: int = 100, device: str = "cpu"
+    model,
+    tokenizer,
+    dataset: str | Path | Iterable[dict[str, Any]],
+    max_samples: int = 100,
+    device: str = "cpu",
 ) -> dict[str, Any]:
     """Evaluate on GSM8K math reasoning."""
-    dataset_path = Path(dataset_path)
-    if not dataset_path.exists():
-        return {"error": f"Dataset not found: {dataset_path}", "accuracy": 0.0}
-
-    with dataset_path.open() as f:
-        data = [json.loads(line) for line in f]
-
-    if max_samples:
-        data = data[:max_samples]
+    data = list(_load_data(dataset, max_samples))
+    if not data:
+        return {"error": f"Dataset empty or not found: {dataset}", "accuracy": 0.0}
 
     correct = 0
     total = 0
@@ -67,18 +86,16 @@ def evaluate_gsm8k(
 
 
 def evaluate_mmlu(
-    model, tokenizer, dataset_path: str | Path, max_samples: int = 100, device: str = "cpu"
+    model,
+    tokenizer,
+    dataset: str | Path | Iterable[dict[str, Any]],
+    max_samples: int = 100,
+    device: str = "cpu",
 ) -> dict[str, Any]:
     """Evaluate on MMLU multiple choice knowledge."""
-    dataset_path = Path(dataset_path)
-    if not dataset_path.exists():
-        return {"error": f"Dataset not found: {dataset_path}", "accuracy": 0.0}
-
-    with dataset_path.open() as f:
-        data = [json.loads(line) for line in f]
-
-    if max_samples:
-        data = data[:max_samples]
+    data = list(_load_data(dataset, max_samples))
+    if not data:
+        return {"error": f"Dataset empty or not found: {dataset}", "accuracy": 0.0}
 
     correct = 0
     total = 0
@@ -111,18 +128,16 @@ def evaluate_mmlu(
 
 
 def evaluate_humaneval(
-    model, tokenizer, dataset_path: str | Path, max_samples: int = 50, device: str = "cpu"
+    model,
+    tokenizer,
+    dataset: str | Path | Iterable[dict[str, Any]],
+    max_samples: int = 50,
+    device: str = "cpu",
 ) -> dict[str, Any]:
     """Evaluate on HumanEval code generation."""
-    dataset_path = Path(dataset_path)
-    if not dataset_path.exists():
-        return {"error": f"Dataset not found: {dataset_path}", "pass_at_1": 0.0}
-
-    with dataset_path.open() as f:
-        data = [json.loads(line) for line in f]
-
-    if max_samples:
-        data = data[:max_samples]
+    data = list(_load_data(dataset, max_samples))
+    if not data:
+        return {"error": f"Dataset empty or not found: {dataset}", "pass_at_1": 0.0}
 
     passed = 0
     total = 0

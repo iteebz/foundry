@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from foundry.benchmarks.constitution import evaluate_constitution
+from foundry.benchmarks.datasets import get_gsm8k, get_humaneval, get_mmlu
 from foundry.benchmarks.tasks import evaluate_gsm8k, evaluate_humaneval, evaluate_mmlu
 
 
@@ -12,31 +13,55 @@ def run_benchmark_suite(
     model,
     tokenizer,
     tasks: list[str],
-    dataset_dir: str | Path = "data/eval",
+    dataset_dir: str | Path | None = None,
     max_samples: int = 100,
     device: str = "cpu",
+    use_hf: bool = True,
 ) -> dict[str, Any]:
-    """Run multi-task evaluation suite."""
-    dataset_dir = Path(dataset_dir)
+    """Run multi-task evaluation suite.
+
+    By default, streams datasets from HuggingFace (lazy download).
+    Set use_hf=False and provide dataset_dir to use local JSONL files.
+    """
     results = {}
 
-    task_map = {
-        "gsm8k": ("gsm8k_test.jsonl", evaluate_gsm8k),
-        "mmlu": ("mmlu_test.jsonl", evaluate_mmlu),
-        "humaneval": ("humaneval.jsonl", evaluate_humaneval),
-        "constitution": ("constitution.jsonl", evaluate_constitution),
+    hf_loaders = {
+        "gsm8k": (get_gsm8k, evaluate_gsm8k),
+        "mmlu": (get_mmlu, evaluate_mmlu),
+        "humaneval": (get_humaneval, evaluate_humaneval),
+    }
+
+    local_files = {
+        "gsm8k": "gsm8k_test.jsonl",
+        "mmlu": "mmlu_test.jsonl",
+        "humaneval": "humaneval.jsonl",
+        "constitution": "constitution.jsonl",
+    }
+
+    eval_fns = {
+        "gsm8k": evaluate_gsm8k,
+        "mmlu": evaluate_mmlu,
+        "humaneval": evaluate_humaneval,
+        "constitution": evaluate_constitution,
     }
 
     for task in tasks:
-        if task not in task_map:
+        if task not in eval_fns:
             results[task] = {"error": f"Unknown task: {task}"}
             continue
 
-        dataset_file, eval_fn = task_map[task]
-        dataset_path = dataset_dir / dataset_file
-
         try:
-            task_results = eval_fn(model, tokenizer, dataset_path, max_samples, device)
+            if use_hf and task in hf_loaders:
+                loader, eval_fn = hf_loaders[task]
+                dataset = loader(max_samples)
+                task_results = eval_fn(model, tokenizer, dataset, max_samples, device)
+            else:
+                if dataset_dir is None:
+                    results[task] = {"error": f"No dataset_dir for local task: {task}"}
+                    continue
+                dataset_path = Path(dataset_dir) / local_files[task]
+                eval_fn = eval_fns[task]
+                task_results = eval_fn(model, tokenizer, dataset_path, max_samples, device)
             results[task] = task_results
         except Exception as e:
             results[task] = {"error": str(e)}

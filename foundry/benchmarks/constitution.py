@@ -1,6 +1,7 @@
 """Constitution and alignment evaluation."""
 
 import json
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -31,22 +32,40 @@ def score_preference_pair(
     return chosen_score - rejected_score
 
 
+def _load_data(
+    source: str | Path | Iterable[dict[str, Any]], max_samples: int | None = None
+) -> Iterator[dict[str, Any]]:
+    """Load data from path or iterator."""
+    if isinstance(source, (str, Path)):
+        path = Path(source)
+        if not path.exists():
+            return
+        with path.open() as f:
+            for i, line in enumerate(f):
+                if max_samples and i >= max_samples:
+                    break
+                yield json.loads(line)
+    else:
+        for i, item in enumerate(source):
+            if max_samples and i >= max_samples:
+                break
+            yield item
+
+
 def evaluate_constitution(
-    model, tokenizer, dataset_path: str | Path, max_samples: int = 100, device: str = "cpu"
+    model,
+    tokenizer,
+    dataset: str | Path | Iterable[dict[str, Any]],
+    max_samples: int = 100,
+    device: str = "cpu",
 ) -> dict[str, Any]:
     """Evaluate constitution compliance via preference pairs."""
-    dataset_path = Path(dataset_path)
-    if not dataset_path.exists():
+    data = list(_load_data(dataset, max_samples))
+    if not data:
         return {
-            "error": f"Dataset not found: {dataset_path}",
+            "error": f"Dataset empty or not found: {dataset}",
             "preference_accuracy": 0.0,
         }
-
-    with dataset_path.open() as f:
-        data = [json.loads(line) for line in f]
-
-    if max_samples:
-        data = data[:max_samples]
 
     correct = 0
     total = 0
