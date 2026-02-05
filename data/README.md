@@ -51,43 +51,26 @@ Foundry focuses on **training infrastructure**, not data sourcing. Bring your ow
 
 ## Evaluation Datasets
 
-Benchmark evaluation expects JSONL files in `data/eval/`:
+Benchmarks stream directly from HuggingFace by default (no local setup required):
+
+```bash
+python -m foundry.cli.sweep attention mla gqa --eval-task gsm8k
+```
+
+Supported tasks: `gsm8k`, `mmlu`, `humaneval`, `constitution`
+
+Datasets are version-pinned in `foundry/benchmarks/datasets.py` for reproducibility.
+
+### Local Override
+
+For offline eval or custom datasets, create JSONL files in `data/eval/`:
 
 ```
 data/eval/
   gsm8k_test.jsonl     # {"question": str, "answer": str}
   mmlu_test.jsonl      # {"question": str, "choices": [str], "answer": str}
   humaneval.jsonl      # {"prompt": str, "test": str, "entry_point": str}
+  constitution.jsonl   # {"chosen": str, "rejected": str}
 ```
 
-Fetch from HuggingFace:
-
-```python
-from datasets import load_dataset
-import json
-
-gsm8k = load_dataset("openai/gsm8k", "main", split="test")
-with open("data/eval/gsm8k_test.jsonl", "w") as f:
-    for item in gsm8k:
-        f.write(json.dumps({"question": item["question"], "answer": item["answer"]}) + "\n")
-
-mmlu = load_dataset("cais/mmlu", "all", split="test")
-with open("data/eval/mmlu_test.jsonl", "w") as f:
-    for item in mmlu:
-        f.write(json.dumps({
-            "question": item["question"],
-            "choices": item["choices"],
-            "answer": chr(65 + item["answer"])
-        }) + "\n")
-
-humaneval = load_dataset("openai/openai_humaneval", split="test")
-with open("data/eval/humaneval.jsonl", "w") as f:
-    for item in humaneval:
-        f.write(json.dumps({
-            "prompt": item["prompt"],
-            "test": item["test"],
-            "entry_point": item["entry_point"]
-        }) + "\n")
-```
-
-Not bundled: licensing varies, datasets version independently, ~100MB total.
+Then run with `--dataset-dir data/eval --no-hf`.
