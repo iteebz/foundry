@@ -1,19 +1,24 @@
 default:
     @just --list
 
-clean:
-    @echo "Cleaning foundry..."
-    @rm -rf .pytest_cache .ruff_cache __pycache__ .venv out/smoke_* out/*.pt
-    @find . -type d -name "__pycache__" -exec rm -rf {} +
-    @find . -type d -name ".pytest_cache" -exec rm -rf {} +
-
 install:
     @uv sync --all-extras
 
 ci:
     @uv run ruff format .
     @uv run ruff check . --fix --unsafe-fixes
+    @uv run ruff check .
+    @uv run pyright
     @uv run pytest tests/ -q
+
+lint:
+    @uv run ruff check .
+
+format:
+    @uv run ruff format .
+
+fix:
+    @uv run ruff check . --fix --unsafe-fixes
 
 test:
     @uv run pytest tests/
@@ -21,14 +26,10 @@ test:
 cov:
     @uv run pytest --cov=src tests/
 
-format:
-    @uv run ruff format .
-
-lint:
-    @uv run ruff check .
-
-fix:
-    @uv run ruff check . --fix --unsafe-fixes
+clean:
+    @rm -rf .pytest_cache .ruff_cache __pycache__ .venv out/smoke_* out/*.pt
+    @find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+    @find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
 
 prepare-tinystories:
     uv run python -m foundry.data.prepare
