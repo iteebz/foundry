@@ -62,8 +62,13 @@ def get_gsm8k(max_samples: int | None = None) -> Iterator[dict[str, Any]]:
 
 
 def get_mmlu(max_samples: int | None = None) -> Iterator[dict[str, Any]]:
-    """Load MMLU test set."""
-    return load_benchmark_dataset("mmlu", max_samples)
+    """Load MMLU test set.
+
+    Transforms integer answer (0-3) to letter (A-D) for eval compatibility.
+    """
+    for item in load_benchmark_dataset("mmlu", max_samples):
+        item["answer"] = chr(65 + item["answer"])
+        yield item
 
 
 def get_humaneval(max_samples: int | None = None) -> Iterator[dict[str, Any]]:
