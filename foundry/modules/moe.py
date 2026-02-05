@@ -40,7 +40,7 @@ class MoELayer(nn.Module):
             ]
         )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, T, C = x.size()
         x_flat = x.view(-1, C)
         num_tokens = x_flat.size(0)
@@ -82,7 +82,7 @@ class MoELayer(nn.Module):
             if start_idx >= end_idx:
                 continue
 
-            expert_id = sorted_expert_indices[start_idx].item()
+            expert_id = int(sorted_expert_indices[start_idx].item())
             batch_tokens = sorted_token_indices[start_idx:end_idx]
             batch_weights = sorted_weights[start_idx:end_idx]
 

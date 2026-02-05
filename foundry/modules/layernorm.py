@@ -7,10 +7,10 @@ import torch.nn as nn
 class LayerNorm(nn.Module):
     """LayerNorm with optional bias."""
 
-    def __init__(self, ndim, bias=True):
+    def __init__(self, ndim: int, bias: bool = True):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(ndim))
         self.bias = nn.Parameter(torch.zeros(ndim)) if bias else None
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return nn.functional.layer_norm(x, self.weight.shape, self.weight, self.bias, 1e-5)

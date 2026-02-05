@@ -45,7 +45,7 @@ class MultiLatentAttention(nn.Module):
             torch.tril(torch.ones(block_size, block_size)).view(1, 1, block_size, block_size),
         )
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, T, C = x.size()
 
         latent = self.c_down(x)
@@ -57,7 +57,8 @@ class MultiLatentAttention(nn.Module):
         v = v.unsqueeze(1).expand(B, self.n_head, T, self.head_dim)
 
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
-        att = att.masked_fill(self.bias[:, :, :T, :T] == 0, float("-inf"))
+        causal_mask: torch.Tensor = self.bias  # type: ignore[assignment]
+        att = att.masked_fill(causal_mask[:, :, :T, :T] == 0, float("-inf"))
         att = F.softmax(att, dim=-1)
         att = self.attn_dropout(att)
 

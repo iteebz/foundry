@@ -4,7 +4,9 @@ import torch
 import torch.nn as nn
 
 
-def sliding_window_mask(seq_len: int, window_size: int, device="cpu") -> torch.Tensor:
+def sliding_window_mask(
+    seq_len: int, window_size: int, device: str | torch.device = "cpu"
+) -> torch.Tensor:
     """Generate sliding window attention mask.
 
     Args:
@@ -36,4 +38,5 @@ class SlidingWindowMask(nn.Module):
 
     def forward(self, seq_len: int) -> torch.Tensor:
         """Get sliding window mask for given sequence length."""
-        return self.mask[:seq_len, :seq_len]
+        mask: torch.Tensor = self.mask  # type: ignore[assignment]
+        return mask[:seq_len, :seq_len]

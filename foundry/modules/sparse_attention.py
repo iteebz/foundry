@@ -5,7 +5,7 @@ import torch.nn as nn
 
 
 def sparse_attention_mask(
-    seq_len: int, block_size: int = 64, stride: int = 64, device="cpu"
+    seq_len: int, block_size: int = 64, stride: int = 64, device: str | torch.device = "cpu"
 ) -> torch.Tensor:
     """Generate sparse attention mask.
 
@@ -45,4 +45,5 @@ class SparseAttentionMask(nn.Module):
 
     def forward(self, seq_len: int) -> torch.Tensor:
         """Get sparse attention mask for given sequence length."""
-        return self.mask[:seq_len, :seq_len]
+        mask: torch.Tensor = self.mask  # type: ignore[assignment]
+        return mask[:seq_len, :seq_len]

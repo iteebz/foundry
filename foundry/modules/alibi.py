@@ -4,10 +4,10 @@ import torch
 import torch.nn as nn
 
 
-def get_alibi_slopes(n_heads):
+def get_alibi_slopes(n_heads: int) -> torch.Tensor:
     """Get ALiBi slopes for attention heads."""
 
-    def get_slopes_power_of_2(n):
+    def get_slopes_power_of_2(n: int) -> torch.Tensor:
         return 2 ** (-(2 ** -(torch.arange(n).float() / n)))
 
     if (n_heads & (n_heads - 1)) == 0:
@@ -26,7 +26,7 @@ def get_alibi_slopes(n_heads):
 class ALiBi(nn.Module):
     """ALiBi position encoding via attention bias."""
 
-    def __init__(self, n_heads, max_seq_len=2048):
+    def __init__(self, n_heads: int, max_seq_len: int = 2048):
         super().__init__()
         self.n_heads = n_heads
         self.max_seq_len = max_seq_len
@@ -37,6 +37,8 @@ class ALiBi(nn.Module):
         alibi = -torch.abs(alibi.unsqueeze(-1) - alibi.unsqueeze(-2))
         self.register_buffer("alibi_bias", alibi)
 
-    def forward(self, seq_len):
+    def forward(self, seq_len: int) -> torch.Tensor:
         """Returns attention bias of shape (1, n_heads, seq_len, seq_len)."""
-        return self.alibi_bias[:, :, :seq_len, :seq_len] * self.slopes
+        alibi_bias: torch.Tensor = self.alibi_bias  # type: ignore[assignment]
+        slopes: torch.Tensor = self.slopes  # type: ignore[assignment]
+        return alibi_bias[:, :, :seq_len, :seq_len] * slopes

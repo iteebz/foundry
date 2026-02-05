@@ -1,5 +1,6 @@
 """Label smoothing for regularization."""
 
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -7,12 +8,12 @@ import torch.nn.functional as F
 class LabelSmoothingCrossEntropy(nn.Module):
     """Cross entropy with label smoothing."""
 
-    def __init__(self, smoothing=0.1, ignore_index=-1):
+    def __init__(self, smoothing: float = 0.1, ignore_index: int = -1):
         super().__init__()
         self.smoothing = smoothing
         self.ignore_index = ignore_index
 
-    def forward(self, logits, targets):
+    def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
         log_probs = F.log_softmax(logits, dim=-1)
         nll_loss = -log_probs.gather(dim=-1, index=targets.unsqueeze(-1)).squeeze(-1)
         smooth_loss = -log_probs.mean(dim=-1)
