@@ -10,9 +10,17 @@ import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from enum import Enum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
+
+from foundry.mutate import (
+    mutate_mla,
+    mutate_moe,
+    mutate_sliding_window,
+    mutate_sparse_attention,
+)
+from foundry.mutate.core import load_baseline, save_mutation
 
 app = typer.Typer(add_completion=False)
 
@@ -250,6 +258,126 @@ def sweep(
 ):
     """Run parallel sweep of mutations."""
     run_sweep(mutation_type, variants, baseline, jobs, promote, eval_task)
+
+
+ARCHITECTURE_MUTATIONS: dict[str, Any] = {
+    "baseline": lambda: load_baseline(),
+    "mla": mutate_mla,
+    "moe": mutate_moe,
+    "sliding_window": mutate_sliding_window,
+    "sparse_attention": mutate_sparse_attention,
+}
+
+
+def generate_architecture_config(name: str) -> Path:
+    """Generate config for an architecture type."""
+    if name not in ARCHITECTURE_MUTATIONS:
+        raise ValueError(
+            f"Unknown architecture: {name}. Available: {list(ARCHITECTURE_MUTATIONS.keys())}"
+        )
+    config = ARCHITECTURE_MUTATIONS[name]()
+    if name == "baseline":
+        return Path("experiments/baseline.yaml")
+    return save_mutation(config)
+
+
+def run_compare(
+    architectures: list[str],
+    jobs: int = 4,
+    eval_task: str | None = None,
+) -> None:
+    """Compare multiple architecture types."""
+    typer.echo(f"Generating {len(architectures)} architecture configs...")
+
+    config_paths = []
+    for arch in architectures:
+        try:
+            path = generate_architecture_config(arch)
+            config_paths.append((arch, path))
+            typer.echo(f"  ✓ {arch}: {path}")
+        except Exception as e:
+            typer.echo(f"  ✗ {arch}: {e}")
+
+    typer.echo(f"\nTraining {len(config_paths)} architectures in parallel (jobs={jobs})...")
+
+    results = []
+    with ProcessPoolExecutor(max_workers=jobs) as executor:
+        futures = {
+            executor.submit(train_mutation, path, eval_task): (name, path)
+            for name, path in config_paths
+        }
+
+        for future in as_completed(futures):
+            name, path = futures[future]
+            try:
+                result = future.result()
+                result["architecture"] = name
+                results.append(result)
+
+                if result["status"] == "success":
+                    score_info = ""
+                    if eval_task and f"{eval_task}_score" in result:
+                        score_info = f", {eval_task}={result[f'{eval_task}_score']:.4f}"
+                    typer.echo(f"  ✓ {name}: val_loss={result['val_loss']:.4f}{score_info}")
+                else:
+                    typer.echo(f"  ✗ {name}: {result.get('error', 'unknown error')}")
+            except Exception as e:
+                typer.echo(f"  ✗ {name}: {e}")
+
+    successful = [r for r in results if r["status"] == "success" and r["val_loss"] is not None]
+
+    if not successful:
+        typer.echo("\n❌ No successful runs")
+        return
+
+    rank_key = f"{eval_task}_score" if eval_task else "val_loss"
+    reverse = eval_task is not None
+    successful.sort(key=lambda x: x.get(rank_key, 0.0), reverse=reverse)
+
+    metric_name = f"{eval_task} score" if eval_task else "val_loss"
+    typer.echo(f"\n{'=' * 60}")
+    typer.echo(f"ARCHITECTURE COMPARISON (ranked by {metric_name})")
+    typer.echo(f"{'=' * 60}\n")
+
+    for i, result in enumerate(successful, 1):
+        typer.echo(f"{i}. {result['architecture']}")
+        if eval_task and f"{eval_task}_score" in result:
+            typer.echo(f"   {eval_task}: {result[f'{eval_task}_score']:.4f}")
+        typer.echo(f"   Val Loss: {result['val_loss']:.4f}")
+        typer.echo(f"   Train Loss: {result['train_loss']:.4f}")
+
+    winner = successful[0]
+    typer.echo(f"\n{'=' * 60}")
+    typer.echo(f"🏆 WINNER: {winner['architecture']}")
+    if eval_task and f"{eval_task}_score" in winner:
+        typer.echo(f"   {eval_task}: {winner[f'{eval_task}_score']:.4f}")
+    typer.echo(f"   Val Loss: {winner['val_loss']:.4f}")
+    typer.echo(f"{'=' * 60}\n")
+
+    report = {
+        "architectures": architectures,
+        "results": successful,
+        "winner": winner,
+    }
+
+    report_path = Path("out") / "compare_architectures.json"
+    report_path.parent.mkdir(exist_ok=True)
+    report_path.write_text(json.dumps(report, indent=2))
+    typer.echo(f"Report: {report_path}")
+
+
+@app.command()
+def compare(
+    architectures: Annotated[
+        list[str], typer.Argument(help="Architecture types to compare (baseline, mla, moe, etc)")
+    ],
+    jobs: Annotated[int, typer.Option(help="Parallel jobs")] = 4,
+    eval_task: Annotated[
+        EvalTask | None, typer.Option(help="Rank by eval task instead of val_loss")
+    ] = None,
+):
+    """Compare multiple architecture types."""
+    run_compare(architectures, jobs, eval_task)
 
 
 if __name__ == "__main__":
