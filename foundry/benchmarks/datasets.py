@@ -10,7 +10,7 @@ DATASET_CONFIGS = {
         "path": "openai/gsm8k",
         "revision": "refs/convert/parquet",
         "split": "test",
-        "name": "main",
+        "name": "default",
     },
     "mmlu": {
         "path": "cais/mmlu",
