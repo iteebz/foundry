@@ -6,7 +6,7 @@ install:
 
 ci:
     @uv run ruff format .
-    @uv run ruff check . --fix --unsafe-fixes
+    @uv run ruff check . --fix
     @uv run ruff check .
     @uv run pyright
     @uv run pytest tests/ -q
@@ -42,3 +42,6 @@ train-baseline:
 
 commits:
     @git --no-pager log --pretty=format:"%h | %ar | %s"
+
+health:
+    @uv run python -m foundry.health
