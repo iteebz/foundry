@@ -1,12 +1,18 @@
 """PyTorch Datasets for token data with auto-detection and mixture sampling."""
 
+from __future__ import annotations
+
 import hashlib
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import torch
 from torch.utils.data import Dataset, Sampler
+
+if TYPE_CHECKING:
+    from foundry.types import TokenizerProtocol
 
 
 def validate_bin_file(path: Path, expected_dtype: np.dtype | None = None) -> dict:
@@ -110,15 +116,15 @@ class TokenDataset(Dataset):
         self._buffer = None
         self._buffer_start = 0
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self._length
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         if self._mode == "memmap":
             return self._getitem_memmap(idx)
         return self._getitem_streaming(idx)
 
-    def _getitem_memmap(self, idx):
+    def _getitem_memmap(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         """O(1) random access with bounds checking."""
         if idx < 0 or idx >= self._length:
             raise IndexError(f"Index {idx} out of bounds (dataset length: {self._length})")
@@ -130,7 +136,7 @@ class TokenDataset(Dataset):
         y = torch.from_numpy(self.data[idx + 1 : idx + 1 + self.block_size].astype(np.int64))
         return x, y
 
-    def _getitem_streaming(self, idx):
+    def _getitem_streaming(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         """Buffered sequential access (optimized for DataLoader workers)."""
         if (
             self._buffer is None
@@ -201,10 +207,10 @@ class MixtureDataset(Dataset):
         rng.shuffle(indices)
         return indices
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.indices)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         ds_idx, sample_idx = self.indices[idx]
         return self.datasets[ds_idx][sample_idx]
 
@@ -223,7 +229,7 @@ class PreferenceDataset(Dataset):
     def __init__(
         self,
         data_path: str | Path,
-        tokenizer,
+        tokenizer: TokenizerProtocol,
         max_length: int = 512,
     ):
         self.data_path = Path(data_path)
@@ -235,10 +241,10 @@ class PreferenceDataset(Dataset):
             for line in f:
                 self.pairs.append(json.loads(line))
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.pairs)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> dict[str, Any]:
         pair = self.pairs[idx]
         prompt = pair["prompt"]
         chosen = pair["chosen"]
@@ -263,7 +269,7 @@ class PreferenceDataset(Dataset):
         }
 
 
-def collate_preference_batch(batch):
+def collate_preference_batch(batch: list[dict[str, Any]]) -> dict[str, torch.Tensor]:
     """Collate preference pairs with padding."""
     max_chosen = max(item["chosen_ids"].size(0) for item in batch)
     max_rejected = max(item["rejected_ids"].size(0) for item in batch)

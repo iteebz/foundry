@@ -7,9 +7,15 @@ from typing import Any
 
 import torch
 
+from foundry.types import ModelProtocol, TokenizerProtocol
+
 
 def score_preference_pair(
-    model, tokenizer, chosen: str, rejected: str, device: str = "cpu"
+    model: ModelProtocol,
+    tokenizer: TokenizerProtocol,
+    chosen: str,
+    rejected: str,
+    device: str = "cpu",
 ) -> float:
     """Score preference pair (higher = model prefers chosen)."""
     model.eval()
@@ -53,8 +59,8 @@ def _load_data(
 
 
 def evaluate_constitution(
-    model,
-    tokenizer,
+    model: ModelProtocol,
+    tokenizer: TokenizerProtocol,
     dataset: str | Path | Iterable[dict[str, Any]],
     max_samples: int = 100,
     device: str = "cpu",
@@ -100,7 +106,7 @@ def evaluate_constitution(
 
 
 def evaluate_helpfulness(
-    model, tokenizer, prompts: list[str], device: str = "cpu"
+    model: ModelProtocol, tokenizer: TokenizerProtocol, prompts: list[str], device: str = "cpu"
 ) -> dict[str, Any]:
     """Evaluate helpfulness on prompts."""
     model.eval()

@@ -1,9 +1,15 @@
-from pathlib import Path
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+import numpy.typing as npt
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
-def pack_to_bin(tokens: list[int], path: Path, dtype=np.uint16):
+def pack_to_bin(tokens: list[int], path: Path, dtype: npt.DTypeLike = np.uint16) -> int:
     arr = np.array(tokens, dtype=dtype)
     arr.tofile(path)
     return len(arr)
@@ -73,7 +79,7 @@ def compute_packing_efficiency(
     sequences: list[list[int]] | None = None,
     max_length: int | None = None,
     packed_sequences: list[list[int]] | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Compute packing efficiency metrics.
 
     Args:

@@ -4,13 +4,15 @@ from collections.abc import Callable
 
 import torch
 
+from foundry.types import ModelProtocol
+
 
 def score_by_length(tokens: list[int]) -> float:
     """Score difficulty by sequence length (longer = harder)."""
     return float(len(tokens))
 
 
-def score_by_perplexity(tokens: list[int], model, device: str = "cpu") -> float:
+def score_by_perplexity(tokens: list[int], model: ModelProtocol, device: str = "cpu") -> float:
     if len(tokens) == 0:
         return 0.0
 

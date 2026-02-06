@@ -5,9 +5,12 @@ Agents can use this to create alignment datasets from their own models.
 """
 
 import random
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
+
+from foundry.types import ModelProtocol, TokenizerProtocol
 
 
 @dataclass
@@ -22,13 +25,13 @@ class PreferencePair:
 
 
 def generate_pairs_from_samples(
-    model,
-    tokenizer,
+    model: ModelProtocol,
+    tokenizer: TokenizerProtocol,
     prompts: list[str],
     num_samples_per_prompt: int = 4,
     temperature: float = 0.8,
     max_new_tokens: int = 512,
-    reward_fn=None,
+    reward_fn: Callable[[str, str], float] | None = None,
 ) -> list[PreferencePair]:
     """Generate preference pairs by sampling multiple responses.
 
@@ -92,11 +95,11 @@ def generate_pairs_from_samples(
 
 
 def generate_pairs_from_models(
-    model_a,
-    model_b,
-    tokenizer,
+    model_a: ModelProtocol,
+    model_b: ModelProtocol,
+    tokenizer: TokenizerProtocol,
     prompts: list[str],
-    reward_fn=None,
+    reward_fn: Callable[[str, str], float] | None = None,
     prefer_model: str = "a",
     max_new_tokens: int = 512,
 ) -> list[PreferencePair]:
@@ -167,8 +170,8 @@ def generate_pairs_from_models(
 
 
 def generate_constitution_pairs(
-    model,
-    tokenizer,
+    model: ModelProtocol,
+    tokenizer: TokenizerProtocol,
     prompts: list[str],
     constitution_principles: list[str],
     max_new_tokens: int = 512,
@@ -233,7 +236,7 @@ Revised response following the critique:"""
     return pairs
 
 
-def save_preference_dataset(pairs: list[PreferencePair], output_path: str):
+def save_preference_dataset(pairs: list[PreferencePair], output_path: str) -> None:
     """Save preference pairs to JSONL for DPO training."""
     import json
     from pathlib import Path

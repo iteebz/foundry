@@ -312,7 +312,11 @@ class GPT(nn.Module):
         return logits, loss
 
     def configure_optimizers(
-        self, weight_decay: float, learning_rate: float, betas: tuple[float, float], device_type: str
+        self,
+        weight_decay: float,
+        learning_rate: float,
+        betas: tuple[float, float],
+        device_type: str,
     ) -> torch.optim.AdamW:
         param_dict = {pn: p for pn, p in self.named_parameters() if p.requires_grad}
         decay_params = [p for p in param_dict.values() if p.dim() >= 2]
@@ -358,7 +362,11 @@ class GPT(nn.Module):
 
     @torch.inference_mode()
     def generate(
-        self, idx: torch.Tensor, max_new_tokens: int, temperature: float = 1.0, top_k: int | None = None
+        self,
+        idx: torch.Tensor,
+        max_new_tokens: int,
+        temperature: float = 1.0,
+        top_k: int | None = None,
     ) -> torch.Tensor:
         for _ in range(max_new_tokens):
             idx_cond = (

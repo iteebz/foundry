@@ -7,11 +7,12 @@ from typing import Any
 from foundry.benchmarks.constitution import evaluate_constitution
 from foundry.benchmarks.datasets import get_gsm8k, get_humaneval, get_mmlu
 from foundry.benchmarks.tasks import evaluate_gsm8k, evaluate_humaneval, evaluate_mmlu
+from foundry.types import ModelProtocol, TokenizerProtocol
 
 
 def run_benchmark_suite(
-    model,
-    tokenizer,
+    model: ModelProtocol,
+    tokenizer: TokenizerProtocol,
     tasks: list[str],
     dataset_dir: str | Path | None = None,
     max_samples: int = 100,

@@ -1,11 +1,16 @@
 """Checkpoint bridge for loading pretrained HuggingFace models into foundry."""
 
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 
+from foundry.types import ModelProtocol, OptimizerProtocol
 
-def load_hf_checkpoint(model, hf_model_name: str, cache_dir: str | None = None) -> None:
+
+def load_hf_checkpoint(
+    model: ModelProtocol, hf_model_name: str, cache_dir: str | None = None
+) -> None:
     """Load HuggingFace checkpoint weights into foundry model.
 
     Supports GPT-2 family models. Maps HF state dict to foundry architecture.
@@ -17,7 +22,7 @@ def load_hf_checkpoint(model, hf_model_name: str, cache_dir: str | None = None) 
         cache_dir: Optional cache directory for HF downloads
     """
     try:
-        from transformers import GPT2LMHeadModel
+        from transformers import GPT2LMHeadModel  # type: ignore[import-not-found]
     except ImportError as e:
         raise ImportError(
             "transformers required for checkpoint loading: pip install transformers"
@@ -63,7 +68,9 @@ def load_hf_checkpoint(model, hf_model_name: str, cache_dir: str | None = None) 
     model.load_state_dict(foundry_sd)
 
 
-def save_checkpoint(model, optimizer, config: dict, path: str) -> None:
+def save_checkpoint(
+    model: ModelProtocol, optimizer: OptimizerProtocol, config: dict[str, Any], path: str
+) -> None:
     """Save foundry checkpoint to disk."""
     checkpoint = {
         "model": model.state_dict(),
@@ -73,7 +80,7 @@ def save_checkpoint(model, optimizer, config: dict, path: str) -> None:
     torch.save(checkpoint, path)
 
 
-def validate_checkpoint(checkpoint: dict) -> None:
+def validate_checkpoint(checkpoint: dict[str, Any]) -> None:
     """Validate checkpoint integrity.
 
     Raises:
@@ -87,10 +94,12 @@ def validate_checkpoint(checkpoint: dict) -> None:
 class ResumeState:
     iter_num: int
     best_val_loss: float
-    config: dict
+    config: dict[str, Any]
 
 
-def load_checkpoint(model, optimizer, path: str, device: str = "cpu") -> ResumeState:
+def load_checkpoint(
+    model: ModelProtocol, optimizer: OptimizerProtocol | None, path: str, device: str = "cpu"
+) -> ResumeState:
     """Load foundry checkpoint from disk.
 
     Returns:

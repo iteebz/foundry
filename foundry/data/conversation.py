@@ -1,7 +1,14 @@
 """Conversation formatting for chat data."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from foundry.types import TokenizerProtocol
 
 
 @dataclass
@@ -19,7 +26,7 @@ class Conversation:
     messages: list[Message]
 
     @classmethod
-    def from_sharegpt(cls, data: dict[str, Any]) -> "Conversation":
+    def from_sharegpt(cls, data: dict[str, Any]) -> Conversation:
         """Parse ShareGPT format conversation."""
         messages = [
             Message(role=msg.get("from", "unknown"), content=msg.get("value", ""))
@@ -28,7 +35,7 @@ class Conversation:
         return cls(messages=messages)
 
     @classmethod
-    def from_openai(cls, data: dict[str, Any]) -> "Conversation":
+    def from_openai(cls, data: dict[str, Any]) -> Conversation:
         """Parse OpenAI format conversation."""
         messages = [
             Message(role=msg.get("role", "user"), content=msg.get("content", ""))
@@ -37,7 +44,7 @@ class Conversation:
         return cls(messages=messages)
 
 
-def format_chatml(conversation: Conversation, tokenizer=None) -> str:
+def format_chatml(conversation: Conversation, tokenizer: TokenizerProtocol | None = None) -> str:
     """Format conversation in ChatML format.
 
     ChatML format:
@@ -117,7 +124,7 @@ def format_alpaca(conversation: Conversation) -> str:
 def pack_conversations(
     conversations: list[Conversation],
     max_length: int = 2048,
-    format_fn=format_chatml,
+    format_fn: Callable[[Conversation], str] = format_chatml,
     separator: str = "\n\n",
 ) -> list[str]:
     """Pack multiple conversations into fixed-length sequences.

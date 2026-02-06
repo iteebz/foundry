@@ -8,6 +8,8 @@ from typing import Any
 
 import torch
 
+from foundry.types import ModelProtocol, TokenizerProtocol
+
 
 def extract_answer(text: str, task_type: str = "math") -> str | None:
     """Extract answer from model output."""
@@ -49,8 +51,8 @@ def _load_data(
 
 
 def evaluate_gsm8k(
-    model,
-    tokenizer,
+    model: ModelProtocol,
+    tokenizer: TokenizerProtocol,
     dataset: str | Path | Iterable[dict[str, Any]],
     max_samples: int = 100,
     device: str = "cpu",
@@ -86,8 +88,8 @@ def evaluate_gsm8k(
 
 
 def evaluate_mmlu(
-    model,
-    tokenizer,
+    model: ModelProtocol,
+    tokenizer: TokenizerProtocol,
     dataset: str | Path | Iterable[dict[str, Any]],
     max_samples: int = 100,
     device: str = "cpu",
@@ -128,8 +130,8 @@ def evaluate_mmlu(
 
 
 def evaluate_humaneval(
-    model,
-    tokenizer,
+    model: ModelProtocol,
+    tokenizer: TokenizerProtocol,
     dataset: str | Path | Iterable[dict[str, Any]],
     max_samples: int = 50,
     device: str = "cpu",

@@ -1,5 +1,7 @@
 """DPO training script."""
 
+from __future__ import annotations
+
 import copy
 import math
 import signal
@@ -7,8 +9,14 @@ import sys
 import traceback
 from contextlib import nullcontext
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import torch
+
+if TYPE_CHECKING:
+    from types import FrameType
+
+    from foundry.types import ModelProtocol
 from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 
@@ -25,7 +33,7 @@ from foundry.model import GPT
 from foundry.modules.dpo_loss import DPOLoss, compute_log_probs
 
 
-def _sigint_handler(sig, frame):
+def _sigint_handler(sig: int, frame: FrameType | None) -> None:
     traceback.print_stack(frame)
     sys.exit(1)
 
@@ -33,7 +41,7 @@ def _sigint_handler(sig, frame):
 signal.signal(signal.SIGINT, _sigint_handler)
 
 
-def get_lr(it, config):
+def get_lr(it: int, config: RunConfig) -> float:
     if it < config.training.warmup_iters:
         return config.training.learning_rate * (it + 1) / (config.training.warmup_iters + 1)
     if it > config.training.lr_decay_iters:
@@ -45,7 +53,13 @@ def get_lr(it, config):
     return config.training.min_lr + coeff * (config.training.learning_rate - config.training.min_lr)
 
 
-def compute_sequence_logprobs(model, input_ids, prompt_lens, ctx, device):
+def compute_sequence_logprobs(
+    model: ModelProtocol,
+    input_ids: torch.Tensor,
+    prompt_lens: torch.Tensor,
+    ctx: Any,
+    device: str,
+) -> torch.Tensor:
     with ctx:
         logits, _ = model(input_ids)
 
@@ -64,7 +78,7 @@ def compute_sequence_logprobs(model, input_ids, prompt_lens, ctx, device):
     return log_probs
 
 
-def _resolve_device(config):
+def _resolve_device(config: RunConfig) -> str:
     device = config.training.device
     if device == "auto":
         if torch.cuda.is_available():
@@ -75,7 +89,7 @@ def _resolve_device(config):
     return device
 
 
-def _resolve_dtype(config):
+def _resolve_dtype(config: RunConfig) -> str:
     dtype = config.training.dtype
     if dtype == "auto":
         if torch.cuda.is_available() and torch.cuda.is_bf16_supported():
@@ -84,7 +98,7 @@ def _resolve_dtype(config):
     return dtype
 
 
-def _load_model_checkpoint(model, path, device):
+def _load_model_checkpoint(model: ModelProtocol, path: str, device: str) -> None:
     from foundry.checkpoint import load_checkpoint
 
     ckpt_path = Path(path)
@@ -93,7 +107,7 @@ def _load_model_checkpoint(model, path, device):
     load_checkpoint(model, None, str(ckpt_path), device=device)
 
 
-def _setup_reference_model(config, model, device):
+def _setup_reference_model(config: RunConfig, model: ModelProtocol, device: str) -> ModelProtocol:
     if config.dpo.reference_model:
         ref_model = GPT(config.model)
         ref_model.to(device)

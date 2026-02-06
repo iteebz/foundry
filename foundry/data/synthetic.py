@@ -7,18 +7,21 @@ closing the loop: model → synthetic data → retrain → improve.
 import json
 import random
 from pathlib import Path
+from typing import Any
 
 import torch
 
+from foundry.types import ModelProtocol, TokenizerProtocol
+
 
 def self_instruct(
-    model,
-    tokenizer,
-    seed_tasks: list[dict],
+    model: ModelProtocol,
+    tokenizer: TokenizerProtocol,
+    seed_tasks: list[dict[str, Any]],
     num_samples: int = 1000,
     temperature: float = 0.8,
     max_new_tokens: int = 512,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Generate instruction-following data from seed tasks.
 
     Based on Self-Instruct paper (Wang et al., 2023).
@@ -79,13 +82,13 @@ Instruction:"""
 
 
 def evol_instruct(
-    model,
-    tokenizer,
-    base_tasks: list[dict],
+    model: ModelProtocol,
+    tokenizer: TokenizerProtocol,
+    base_tasks: list[dict[str, Any]],
     num_iterations: int = 3,
     evolution_types: list[str] | None = None,
     temperature: float = 0.7,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Evolve instructions to increase complexity.
 
     Based on Evol-Instruct (Xu et al., 2023).
@@ -144,12 +147,12 @@ def evol_instruct(
 
 
 def generate_math_problems(
-    model,
-    tokenizer,
+    model: ModelProtocol,
+    tokenizer: TokenizerProtocol,
     difficulty: str = "medium",
     num_problems: int = 1000,
     topics: list[str] | None = None,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Generate synthetic math problems.
 
     Args:

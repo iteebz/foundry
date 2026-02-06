@@ -1,13 +1,18 @@
 """Prepare datasets for training - downloads and tokenizes to .bin files."""
 
+from __future__ import annotations
+
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import tiktoken
 from datasets import load_dataset
 
 
-def prepare_tinystories(out_dir: Path | str = "data/tinystories", encoding: str = "cl100k_base"):
+def prepare_tinystories(
+    out_dir: Path | str = "data/tinystories", encoding: str = "cl100k_base"
+) -> dict[str, Any]:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
