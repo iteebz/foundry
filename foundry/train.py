@@ -136,7 +136,7 @@ def train(config_path: str | Path) -> None:
     meta_path = data_dir / "meta.pkl"
     if meta_path.exists():
         with meta_path.open("rb") as f:
-            meta = pickle.load(f)
+            meta = pickle.load(f)  # noqa: S301
         config.model.vocab_size = meta["vocab_size"]
 
     model: GPT | torch.nn.Module = GPT(config.model)
