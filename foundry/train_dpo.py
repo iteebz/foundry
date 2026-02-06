@@ -129,7 +129,14 @@ def _get_tokenizer():
         raise ImportError("DPO training requires tiktoken: pip install tiktoken") from e
 
 
-def _save_checkpoint(raw_model, optimizer, config, iter_num, best_val_loss, out_dir):
+def _save_checkpoint(
+    raw_model: Any,
+    optimizer: Any,
+    config: RunConfig,
+    iter_num: int,
+    best_val_loss: float,
+    out_dir: Path,
+) -> None:
     checkpoint = {
         "model": raw_model.state_dict(),
         "optimizer": optimizer.state_dict(),
@@ -175,7 +182,11 @@ def train_dpo(config_path: str | Path):  # noqa: C901
         dtype
     ]
     use_amp = device_type == "cuda" and dtype in ("float16", "bfloat16")
-    ctx = torch.amp.autocast(device_type="cuda", dtype=ptdtype) if use_amp else nullcontext()
+    ctx = (
+        torch.amp.autocast(device_type="cuda", dtype=ptdtype)  # type: ignore[attr-defined]
+        if use_amp
+        else nullcontext()
+    )
 
     model = GPT(config.model)
     model.to(device)
@@ -195,7 +206,7 @@ def train_dpo(config_path: str | Path):  # noqa: C901
             lora_dropout=config.lora.lora_dropout,
         )
 
-    scaler = torch.amp.GradScaler("cuda", enabled=(use_amp and dtype == "float16"))
+    scaler = torch.amp.GradScaler("cuda", enabled=(use_amp and dtype == "float16"))  # type: ignore[attr-defined]
     optimizer = model.configure_optimizers(
         config.training.weight_decay,
         config.training.learning_rate,
@@ -211,7 +222,7 @@ def train_dpo(config_path: str | Path):  # noqa: C901
         ref_model = torch.compile(ref_model, mode=config.training.compile_mode)
 
     model, is_ddp, is_fsdp = wrap_model_distributed(
-        model,
+        model,  # type: ignore[arg-type]
         strategy=config.training.distributed,
         fsdp_min_params=config.training.fsdp_min_params,
     )
@@ -224,7 +235,7 @@ def train_dpo(config_path: str | Path):  # noqa: C901
     tokenizer = _get_tokenizer()
     train_dataset = PreferenceDataset(
         config.dpo.preference_data,
-        tokenizer,
+        tokenizer,  # type: ignore[arg-type]
         max_length=config.data.block_size,
     )
 
@@ -250,7 +261,7 @@ def train_dpo(config_path: str | Path):  # noqa: C901
     current_epoch = 0
     train_iter = iter(train_loader)
     if hasattr(train_sampler, "set_epoch"):
-        train_sampler.set_epoch(current_epoch)
+        train_sampler.set_epoch(current_epoch)  # type: ignore[attr-defined]
 
     while iter_num <= config.training.max_iters:
         try:
@@ -258,7 +269,7 @@ def train_dpo(config_path: str | Path):  # noqa: C901
         except StopIteration:
             current_epoch += 1
             if hasattr(train_sampler, "set_epoch"):
-                train_sampler.set_epoch(current_epoch)
+                train_sampler.set_epoch(current_epoch)  # type: ignore[attr-defined]
             train_iter = iter(train_loader)
             batch = next(train_iter)
 
@@ -272,21 +283,37 @@ def train_dpo(config_path: str | Path):  # noqa: C901
 
         for micro_step in range(effective_grad_accum):
             if is_ddp:
-                model.require_backward_grad_sync = micro_step == effective_grad_accum - 1
+                model.require_backward_grad_sync = micro_step == effective_grad_accum - 1  # type: ignore[attr-defined]
 
             with torch.no_grad():
                 ref_chosen_logps = compute_sequence_logprobs(
-                    ref_model, chosen_ids, prompt_lens, ctx, device
+                    ref_model,
+                    chosen_ids,
+                    prompt_lens,
+                    ctx,
+                    device,  # type: ignore[arg-type]
                 )
                 ref_rejected_logps = compute_sequence_logprobs(
-                    ref_model, rejected_ids, prompt_lens, ctx, device
+                    ref_model,
+                    rejected_ids,
+                    prompt_lens,
+                    ctx,
+                    device,  # type: ignore[arg-type]
                 )
 
             policy_chosen_logps = compute_sequence_logprobs(
-                model, chosen_ids, prompt_lens, ctx, device
+                model,
+                chosen_ids,
+                prompt_lens,
+                ctx,
+                device,  # type: ignore[arg-type]
             )
             policy_rejected_logps = compute_sequence_logprobs(
-                model, rejected_ids, prompt_lens, ctx, device
+                model,
+                rejected_ids,
+                prompt_lens,
+                ctx,
+                device,  # type: ignore[arg-type]
             )
 
             loss = dpo_loss_fn(
@@ -308,7 +335,7 @@ def train_dpo(config_path: str | Path):  # noqa: C901
                 except StopIteration:
                     current_epoch += 1
                     if hasattr(train_sampler, "set_epoch"):
-                        train_sampler.set_epoch(current_epoch)
+                        train_sampler.set_epoch(current_epoch)  # type: ignore[attr-defined]
                     train_iter = iter(train_loader)
                     batch = next(train_iter)
                 chosen_ids = batch["chosen_ids"].to(device)
