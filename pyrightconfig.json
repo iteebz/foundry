@@ -1,0 +1,19 @@
+{
+  "include": ["foundry"],
+  "exclude": ["**/__pycache__", ".venv"],
+  "reportUnknownMemberType": false,
+  "reportUnknownArgumentType": false,
+  "reportUnknownVariableType": false,
+  "reportMissingTypeStubs": false,
+  "reportGeneralTypeIssues": false,
+  "reportArgumentType": false,
+  "reportAttributeAccessIssue": false,
+  "reportCallIssue": false,
+  "reportMissingImports": false,
+  "reportRedeclaration": false,
+  "reportPrivateImportUsage": false,
+  "reportOperatorIssue": false,
+  "reportAssignmentType": false,
+  "reportOptionalOperand": false,
+  "typeCheckingMode": "basic"
+}
