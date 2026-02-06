@@ -27,7 +27,7 @@ def test_load_checkpoint_returns_resume_state(tiny_model):
     """load_checkpoint returns ResumeState with iter_num and best_val_loss."""
     model = tiny_model
     optimizer = model.configure_optimizers(0.01, 1e-4, (0.9, 0.95), "cpu")
-    original_weight = model.transformer.wte.weight.clone()
+    original_weight = model.wte.weight.clone()
 
     with tempfile.NamedTemporaryFile(suffix=".pt", delete=False) as f:
         temp_path = f.name
@@ -42,7 +42,7 @@ def test_load_checkpoint_returns_resume_state(tiny_model):
         }
         torch.save(checkpoint, temp_path)
 
-        model.transformer.wte.weight.data.zero_()
+        model.wte.weight.data.zero_()
 
         resume_state = load_checkpoint(model, optimizer, temp_path)
 
@@ -50,7 +50,7 @@ def test_load_checkpoint_returns_resume_state(tiny_model):
         assert resume_state.iter_num == 42
         assert resume_state.best_val_loss == 1.5
         assert resume_state.config["test"] == "config"
-        assert torch.allclose(model.transformer.wte.weight, original_weight)
+        assert torch.allclose(model.wte.weight, original_weight)
     finally:
         Path(temp_path).unlink()
 
