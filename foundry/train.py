@@ -30,6 +30,28 @@ from foundry.eval import evaluate
 from foundry.metrics import MetricLogger
 from foundry.model import GPT
 
+
+def check_m4_safety() -> None:
+    import platform
+    import subprocess
+
+    if platform.system() == "Darwin":
+        try:
+            # Enforce human constraint d/8b11c2c4: No training on M4
+            # Using absolute path for sysctl to satisfy S607
+            brand_bytes = subprocess.check_output(
+                ["/usr/sbin/sysctl", "-n", "machdep.cpu.brand_string"],
+                stderr=subprocess.DEVNULL,
+            )
+            brand = brand_bytes.decode().strip()
+            if "M4" in brand:
+                sys.stderr.write(f"FATAL: Training blocked on {brand} (d/8b11c2c4)\n")
+                sys.exit(1)
+        except (subprocess.SubprocessError, OSError):
+            # If sysctl fails, we cannot verify, so we allow it to proceed.
+            pass
+
+
 if TYPE_CHECKING:
     from types import FrameType
 
@@ -85,6 +107,7 @@ def _set_sampler_stage(sampler: Sampler, stage: int) -> None:
 
 
 def train(config_path: str | Path) -> None:
+    check_m4_safety()
     config = RunConfig.from_yaml(Path(config_path))
 
     master_process, rank, world_size = init_distributed(backend="nccl")

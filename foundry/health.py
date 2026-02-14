@@ -84,11 +84,36 @@ def _check_data_exists() -> CheckResult:
     return CheckResult(ok=True, score=100, detail="tinystories data present")
 
 
+def _check_hardware_safety() -> CheckResult:
+    import platform
+
+    if platform.system() != "Darwin":
+        return CheckResult(ok=True, score=100, detail="non-darwin system")
+
+    try:
+        # Check brand string using absolute path for sysctl
+        brand_bytes = subprocess.check_output(
+            ["/usr/sbin/sysctl", "-n", "machdep.cpu.brand_string"],
+            stderr=subprocess.DEVNULL,
+        )
+        brand = brand_bytes.decode().strip()
+        if "M4" in brand:
+            return CheckResult(
+                ok=False, score=0, detail=f"training blocked on {brand} (d/8b11c2c4)"
+            )
+    except (subprocess.SubprocessError, OSError):
+        # Hardware check failure shouldn't fail health, just report OK as default
+        pass
+
+    return CheckResult(ok=True, score=100, detail="hardware safe for training")
+
+
 _CHECKS: list[tuple[str, Callable[[], CheckResult], int]] = [
-    ("ci", _check_ci, 40),
+    ("ci", _check_ci, 30),
     ("training", _check_training_sanity, 30),
     ("experiments", _check_experiments_valid, 15),
     ("data", _check_data_exists, 15),
+    ("safety", _check_hardware_safety, 10),
 ]
 
 
