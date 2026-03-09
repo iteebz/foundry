@@ -1,142 +1,51 @@
-# foundry
+# Foundry
 
-**mutating transformers.**
+Mutation-based ML training framework. Built on nanoGPT in 21 hours.
 
-## Quick Start
+**Dec 3–4, 2025.** One human steering one AI agent. 46 commits. Zero ML training experience from the human. The [commit log](../../commits/main) is timestamped.
 
-```bash
-# Train baseline
-python -m foundry.train experiments/baseline.yaml
+**Jan–Feb 2026.** 7 autonomous agents returned to the repo independently — type compliance, benchmarks, test coverage, health scoring. No human steering. Visible in `git log --format="%an"`.
 
-# Generate mutation
-python -m foundry.mutate attention mla
-
-# Autonomous sweep
-python -m foundry.cli.sweep attention mla gqa_2kv --eval-task gsm8k --promote
-```
-
-## The Loop
+## What it does
 
 ```
-mutate → train → evaluate → promote → repeat
+mutate → train → rank → promote → repeat
 ```
 
-## Mutations
+21 mutation types across architecture (GQA/MQA/MHA, MLA, MoE, depth, width, norm, activation, position encoding, loss, sliding window, sparse attention), training (LR, batch size, warmup, grad clip, weight decay, Adam betas, LoRA), and data (conversation format, filtering).
 
-21 mutation types across architecture, training, data:
+## What's real
 
-**Architecture:**
-- Attention: GQA, MLA, MoE, sliding window, sparse
-- Depth/width scaling
-- Norm: RMSNorm, LayerNorm
-- Activation: SwiGLU, GELU, GLU
-- Position: RoPE, ALiBi
-- Loss: CrossEntropy, Focal, LabelSmoothing, DPO
+- **Training loop.** Cosine LR, AMP, gradient accumulation, EMA, checkpoint resume, wandb. CPU/MPS/CUDA.
+- **Sweep runner.** Parallel training, ranking, auto-promote winner.
+- **Mutation engine.** All 21 types generate valid configs. Tested.
+- **Data pipeline.** BPE tokenizer, memory-mapped datasets, 8-filter quality pipeline, curriculum learning.
 
-**Training:**
-- LR, batch size, warmup, grad clip
-- Weight decay, Adam betas
-- LoRA rank/alpha/dropout
+## What's not
 
-**Data:**
-- Conversation formats (ChatML, Llama3, Alpaca)
-
-## Eval Harness
-
-Rank mutations by capability, not loss:
-
-```bash
-python -m foundry.cli.sweep norm rmsnorm layernorm \\
-  --eval-task gsm8k --promote --jobs 4
-```
-
-Tasks: GSM8K (math), MMLU (knowledge), HumanEval (code), Constitution (alignment)
-
-## Model Zoo
-
-Start from pretrained:
-
-```python
-from foundry.zoo import load_pretrained
-
-model = load_pretrained("llama3-1b", device="cuda")
-```
-
-Configs: llama3-8b, llama3-1b, mistral-7b, qwen2-7b
-
-## Distributed Training
-
-Auto-detects and configures distributed training:
-
-**Single GPU:**
-```bash
-python -m foundry.train experiments/baseline.yaml
-```
-
-**Multi-GPU (auto-selects DDP or FSDP based on model size):**
-```bash
-torchrun --nproc_per_node=4 -m foundry.train experiments/baseline.yaml
-```
-
-**Manual override:**
-```yaml
-# experiments/baseline.yaml
-training:
-  distributed: "ddp"  # or "fsdp", "auto", "none"
-  fsdp_min_params: 1000000000  # Use FSDP for models >1B params
-```
-
-**Auto-selection logic:**
-- 1 GPU/CPU → No wrapping (zero overhead)
-- Multi-GPU + <1B params → DDP
-- Multi-GPU + ≥1B params → FSDP
-- Multi-CPU → DDP with gloo (dev/testing only, slow)
-
-## LoRA Finetuning
-
-90-99% param reduction:
-
-```bash
-python -m foundry.mutate lora_rank 16
-python -m foundry.train experiments/lora_r16.yaml
-```
-
-## Data Pipeline
-
-**Tokenizers:**
-```python
-from foundry.data.tokenize import BPETokenizer
-
-tok = BPETokenizer(vocab_size=50257)
-tok.fit(corpus)
-ids = tok.encode("hello world")
-```
-
-**Curriculum:** Order training by difficulty (length, perplexity)
-
-**Synthetic:** Self-instruct generation from existing models
-
-**Pack:** Greedy bin-packing for variable-length sequences
-
-**Filter:** Dedupe (sha256), length filtering
+- **Never trained at scale.** No GPUs were available. The loop runs, mechanics verified, no loss curves.
+- **Eval harness untested at scale.** GSM8K, MMLU, HumanEval implementations exist, never evaluated a real checkpoint.
+- **Model zoo is config-only.** No HuggingFace weight download.
 
 ## Structure
 
 ```
 foundry/
-├── foundry/
-│   ├── model.py       # GPT with swappable components
-│   ├── train.py       # Training loop with auto-distributed
-│   ├── modules/       # 17 architecture variants
-│   ├── data/          # Tokenize, curriculum, pack, filter, synthetic
-│   ├── mutate/        # 21 mutation generators
-│   ├── benchmarks/    # GSM8K, MMLU, HumanEval, Constitution
-│   └── cli/           # sweep, compare, lr_finder
-├── tests/
-└── experiments/
+├── model.py          # GPT with swappable components (383 lines)
+├── train.py          # Training loop (501 lines)
+├── mutate/           # 21 mutation generators
+├── modules/          # 16 architecture components
+├── data/             # Tokenize, filter, curriculum, mixture
+├── benchmarks/       # GSM8K, MMLU, HumanEval
+├── cli/              # sweep, compare
+├── distributed.py    # DDP/FSDP auto-selection
+├── lora.py           # LoRA adapters
+└── config.py         # RunConfig with freeze/validate
 ```
 
-See [docs/architecture.md](docs/architecture.md) for technical details.
+~6,300 lines of source. ~5,500 lines of tests.
+
+The interesting part isn't this repo. It's what built it.
 
 ## License
 
