@@ -67,14 +67,6 @@ def eval_cmd(
     )
 
 
-@app.command("health")
-def health_cmd():
-    """Check repo health: CI, training sanity, experiments, data."""
-    from foundry import health
-
-    health.cli()
-
-
 def main():
     app()
 

@@ -52,7 +52,6 @@ ignore = [
 "foundry/train.py" = ["C901"]  # training loop is inherently complex
 "foundry/cli/sweep.py" = ["C901"]  # sweep orchestration
 "foundry/model.py" = ["C901"]  # config validation
-"foundry/health.py" = ["T201"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
