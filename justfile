@@ -4,6 +4,9 @@ default:
 install:
     @uv sync --all-extras
 
+build:
+    @uv build
+
 format:
     uv run ruff format . && uv run ruff check --fix --unsafe-fixes . || true
 
