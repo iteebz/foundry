@@ -4,21 +4,19 @@ default:
 install:
     @uv sync --all-extras
 
-ci:
-    @uv run ruff format .
-    @uv run ruff check . --fix
-    @uv run ruff check .
-    @uv run pyright
-    @uv run pytest tests/ -q
+format:
+    uv run ruff format . && uv run ruff check --fix --unsafe-fixes . || true
 
 lint:
     @uv run ruff check .
 
-format:
-    @uv run ruff format .
+typecheck:
+    @uv run pyright
 
-fix:
-    @uv run ruff check . --fix --unsafe-fixes
+test:
+    @uv run pytest tests/
+
+ci: lint typecheck test
 
 test:
     @uv run pytest tests/
