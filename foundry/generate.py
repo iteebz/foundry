@@ -15,7 +15,6 @@ def load_checkpoint(ckpt_path: str, device: str = "cpu"):
     """Load model from checkpoint."""
     checkpoint = torch.load(ckpt_path, map_location=device, weights_only=False)
     model_args = checkpoint["model_args"]
-    checkpoint.get("config", {})
 
     from foundry.model import GPT, GPTConfig
 

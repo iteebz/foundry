@@ -21,9 +21,6 @@ test:
 
 ci: lint typecheck test
 
-test:
-    @uv run pytest tests/
-
 cov:
     @uv run pytest --cov=src tests/
 
