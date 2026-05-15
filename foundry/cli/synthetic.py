@@ -2,7 +2,7 @@
 """CLI for synthetic data generation."""
 
 import json
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
 
@@ -11,7 +11,7 @@ import typer
 app = typer.Typer(add_completion=False)
 
 
-class GenerationType(str, Enum):
+class GenerationType(StrEnum):
     self_instruct = "self_instruct"
     evol_instruct = "evol_instruct"
     math = "math"

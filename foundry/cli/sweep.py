@@ -8,7 +8,7 @@ import json
 import subprocess
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -25,7 +25,7 @@ from foundry.mutate.core import load_baseline, save_mutation
 app = typer.Typer(add_completion=False)
 
 
-class EvalTask(str, Enum):
+class EvalTask(StrEnum):
     gsm8k = "gsm8k"
     mmlu = "mmlu"
     humaneval = "humaneval"
