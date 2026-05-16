@@ -19,7 +19,7 @@ typecheck:
 test:
     @uv run pytest tests/
 
-ci: lint typecheck test
+ci: install lint typecheck test
 
 cov:
     @uv run pytest --cov=src tests/
