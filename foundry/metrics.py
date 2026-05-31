@@ -30,14 +30,3 @@ class MetricLogger:
         """Get the last logged metrics."""
         metrics = self.read_metrics()
         return metrics[-1] if metrics else None
-
-    def get_best_val_loss(self) -> tuple[float, int] | None:
-        """Get best validation loss and iteration number."""
-        metrics = self.read_metrics()
-        val_metrics = [m for m in metrics if "val_loss" in m and m["val_loss"] is not None]
-
-        if not val_metrics:
-            return None
-
-        best = min(val_metrics, key=lambda m: m["val_loss"])
-        return best["val_loss"], best.get("iter", 0)

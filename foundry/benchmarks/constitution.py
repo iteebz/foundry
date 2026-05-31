@@ -103,32 +103,3 @@ def evaluate_constitution(
         "correct": correct,
         "total": total,
     }
-
-
-def evaluate_helpfulness(
-    model: ModelProtocol, tokenizer: TokenizerProtocol, prompts: list[str], device: str = "cpu"
-) -> dict[str, Any]:
-    """Evaluate helpfulness on prompts."""
-    model.eval()
-
-    responses = []
-    for prompt in prompts:
-        inputs = tokenizer.encode(prompt)
-        inputs = torch.tensor([inputs], device=device)
-
-        with torch.no_grad():
-            outputs = model.generate(inputs, max_new_tokens=150, temperature=0.7)
-            generated = tokenizer.decode(outputs[0].tolist())
-
-        response = generated[len(prompt) :]
-        responses.append(response)
-
-    helpful_count = sum(
-        1 for r in responses if len(r.strip()) > 20 and not r.strip().startswith("I cannot")
-    )
-
-    return {
-        "helpfulness_rate": helpful_count / len(prompts) if prompts else 0.0,
-        "helpful_count": helpful_count,
-        "total": len(prompts),
-    }

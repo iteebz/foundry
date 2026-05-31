@@ -330,17 +330,6 @@ class GPT(nn.Module):
         extra_args = {"fused": True} if use_fused else {}
         return torch.optim.AdamW(optim_groups, lr=learning_rate, betas=betas, **extra_args)
 
-    def crop_block_size(self, block_size: int) -> None:
-        assert block_size <= self.config.block_size
-        self.config.block_size = block_size
-        for i in range(len(self.blocks)):
-            blk = self.blocks[i]
-            assert isinstance(blk, Block)
-            if blk.attn.rope is not None:
-                blk.attn.rope.max_seq_len = block_size
-            elif blk.attn.alibi is not None:
-                blk.attn.alibi.max_seq_len = block_size
-
     @classmethod
     def from_pretrained(
         cls, model_type: str, override_args: dict[str, object] | None = None
@@ -348,17 +337,6 @@ class GPT(nn.Module):
         raise NotImplementedError(
             "model_v2 doesn't support pretrained loading (no learned pos embeddings)"
         )
-
-    def estimate_mfu(self, fwdbwd_per_iter: int, dt: float) -> float:
-        N = self.get_num_params()
-        cfg = self.config
-        L, H, Q, T = cfg.n_layer, cfg.n_head, cfg.n_embd // cfg.n_head, cfg.block_size
-        flops_per_token = 6 * N + 12 * L * H * Q * T
-        flops_per_fwdbwd = flops_per_token * T
-        flops_per_iter = flops_per_fwdbwd * fwdbwd_per_iter
-        flops_achieved = flops_per_iter * (1.0 / dt)
-        flops_promised = 312e12
-        return flops_achieved / flops_promised
 
     @torch.inference_mode()
     def generate(

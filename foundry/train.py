@@ -87,11 +87,6 @@ class EMA:
         for k, v in model.state_dict().items():
             self.shadow[k].mul_(self.decay).add_(v, alpha=1 - self.decay)
 
-    def apply_shadow(self, model: torch.nn.Module) -> None:
-        for k, v in model.named_parameters():
-            if k in self.shadow:
-                v.data.copy_(self.shadow[k])
-
 
 Sampler = DistributedSampler[TokenDataset | MixtureDataset] | CurriculumSampler | RandomSampler
 
