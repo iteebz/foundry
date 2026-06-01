@@ -244,9 +244,8 @@ class Block(nn.Module):
             attn_out = ckpt(attn_fn, x, use_reentrant=False)
             mlp_out = ckpt(mlp_fn, x + attn_out, use_reentrant=False)
             return x + attn_out + mlp_out
-            x = x + self.attn(self.ln_1(x))
-            x = x + self.mlp(self.ln_2(x))
-        return x
+        attn_out = x + self.attn(self.ln_1(x))
+        return attn_out + self.mlp(self.ln_2(attn_out))
 
 
 class GPT(nn.Module):
@@ -274,7 +273,10 @@ class GPT(nn.Module):
                 torch.nn.init.normal_(p, mean=0.0, std=0.02 / math.sqrt(2 * config.n_layer))
 
     def get_num_params(self, non_embedding: bool = True) -> int:
-        return sum(p.numel() for p in self.parameters())
+        n = sum(p.numel() for p in self.parameters())
+        if non_embedding:
+            n -= self.wte.weight.numel()
+        return n
 
     def _init_weights(self, module: nn.Module) -> None:
         if isinstance(module, nn.Linear):
