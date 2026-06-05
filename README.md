@@ -1,12 +1,16 @@
-# Foundry
+# foundry
 
-Mutation-based ML training framework. Built on nanoGPT in 21 hours.
+mutation-based ML training framework. built on nanoGPT in 21 hours.
 
-**Dec 3–4, 2025.** One human steering one AI agent. 46 commits. Zero ML training experience from the human. The [commit log](../../commits/main) is timestamped.
+## the origin story
 
-**Jan–Feb 2026.** 7 autonomous agents returned to the repo independently — type compliance, benchmarks, test coverage, health scoring. No human steering. Visible in `git log --format="%an"`.
+**dec 3–4, 2025.** one human. one AI agent. 46 commits. zero ML training experience from the human. the [commit log](../../commits/space) is timestamped.
 
-## What it does
+**jan–feb 2026.** 7 autonomous agents returned to the repo independently — type compliance, benchmarks, test coverage, health scoring. nobody asked them to. visible in `git log --format="%an"`.
+
+109 commits total. 72 from the human. 37 from agents named things like `jobs`, `zealot`, `kitsuragi`, `prime`, `harbinger`, `oplot`, and `kondo`. this is a real contributor list on a real repo.
+
+## what it does
 
 ```
 mutate → train → rank → promote → repeat
@@ -14,39 +18,37 @@ mutate → train → rank → promote → repeat
 
 21 mutation types across architecture (GQA/MQA/MHA, MLA, MoE, depth, width, norm, activation, position encoding, loss, sliding window, sparse attention), training (LR, batch size, warmup, grad clip, weight decay, Adam betas, LoRA), and data (conversation format, filtering).
 
-## What's real
+## what's real
 
-- **Training loop.** Cosine LR, AMP, gradient accumulation, EMA, checkpoint resume, wandb. CPU/MPS/CUDA.
-- **Sweep runner.** Parallel training, ranking, auto-promote winner.
-- **Mutation engine.** All 21 types generate valid configs. Tested.
-- **Data pipeline.** BPE tokenizer, memory-mapped datasets, 8-filter quality pipeline, curriculum learning.
+- **training loop.** cosine LR, AMP, gradient accumulation, EMA, checkpoint resume, wandb. CPU/MPS/CUDA.
+- **sweep runner.** parallel training, ranking, auto-promote winner.
+- **mutation engine.** all 21 types generate valid configs. tested.
+- **data pipeline.** BPE tokenizer, memory-mapped datasets, 8-filter quality pipeline, curriculum learning.
 
-## What's not
+## what's not
 
-- **Never trained at scale.** No GPUs were available. The loop runs, mechanics verified, no loss curves.
-- **Eval harness untested at scale.** GSM8K, MMLU, HumanEval implementations exist, never evaluated a real checkpoint.
-- **Model zoo is config-only.** No HuggingFace weight download.
+- **never trained at scale.** no GPUs were available. the loop runs, mechanics verified, no loss curves.
+- **eval harness untested at scale.** GSM8K, MMLU, HumanEval implementations exist, never evaluated a real checkpoint.
+- **model zoo is config-only.** no HuggingFace weight download.
 
-## Structure
+## structure
 
 ```
 foundry/
-├── model.py          # GPT with swappable components (383 lines)
-├── train.py          # Training loop (501 lines)
-├── mutate/           # 21 mutation generators
-├── modules/          # 16 architecture components
-├── data/             # Tokenize, filter, curriculum, mixture
-├── benchmarks/       # GSM8K, MMLU, HumanEval
-├── cli/              # sweep, compare
-├── distributed.py    # DDP/FSDP auto-selection
-├── lora.py           # LoRA adapters
-└── config.py         # RunConfig with freeze/validate
+├── model.py          GPT with swappable components
+├── train.py          training loop
+├── mutate/           21 mutation generators
+├── modules/          architecture components
+├── data/             tokenize, filter, curriculum, mixture
+├── benchmarks/       GSM8K, MMLU, HumanEval
+├── cli/              sweep, compare
+├── distributed.py    DDP/FSDP auto-selection
+├── lora.py           LoRA adapters
+└── config.py         RunConfig with freeze/validate
 ```
 
-~6,300 lines of source. ~5,500 lines of tests.
+the interesting part isn't this repo. it's what built it.
 
-The interesting part isn't this repo. It's what built it.
-
-## License
+## license
 
 Apache 2.0
