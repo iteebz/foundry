@@ -14,12 +14,15 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import torch
 import yaml
-from torch.utils.data import DataLoader, RandomSampler
-from torch.utils.data.distributed import DistributedSampler
 
 from foundry.config import RunConfig
 from foundry.data.curriculum import get_curriculum_stage
-from foundry.data.dataset import CurriculumSampler, MixtureDataset, TokenDataset
+from foundry.data.loaders import (
+    build_dataloaders,
+    build_datasets,
+    set_sampler_epoch,
+    set_sampler_stage,
+)
 from foundry.distributed import (
     cleanup_distributed,
     init_distributed,
@@ -88,19 +91,6 @@ class EMA:
             self.shadow[k].mul_(self.decay).add_(v, alpha=1 - self.decay)
 
 
-Sampler = DistributedSampler[TokenDataset | MixtureDataset] | CurriculumSampler | RandomSampler
-
-
-def _set_sampler_epoch(sampler: Sampler, epoch: int) -> None:
-    if isinstance(sampler, (DistributedSampler, CurriculumSampler)):
-        sampler.set_epoch(epoch)
-
-
-def _set_sampler_stage(sampler: Sampler, stage: int) -> None:
-    if isinstance(sampler, CurriculumSampler):
-        sampler.set_stage(stage)
-
-
 def train(config_path: str | Path) -> None:
     check_m4_safety()
     config = RunConfig.from_yaml(Path(config_path))
@@ -149,9 +139,7 @@ def train(config_path: str | Path) -> None:
     use_amp = device_type == "cuda" and dtype in ("float16", "bfloat16")
     ctx = torch.amp.autocast(device_type="cuda", dtype=ptdtype) if use_amp else nullcontext()
 
-    data_dir = Path("data") / config.data.dataset
-
-    meta_path = data_dir / "meta.pkl"
+    meta_path = Path("data") / config.data.dataset / "meta.pkl"
     if meta_path.exists():
         with meta_path.open("rb") as f:
             meta = pickle.load(f)  # noqa: S301
@@ -215,80 +203,15 @@ def train(config_path: str | Path) -> None:
 
     raw_model = model.module if (is_ddp or is_fsdp) else model
 
-    train_dataset: TokenDataset | MixtureDataset
-    val_dataset: TokenDataset | MixtureDataset
-
-    if config.data.sources:
-
-        def get_train_path(src_path: str) -> str:
-            p = Path(src_path)
-            if p.stem.endswith("_train"):
-                return src_path
-            if p.stem.endswith("_val"):
-                return str(p.parent / f"{p.stem.replace('_val', '_train')}{p.suffix}")
-            return str(p.parent / f"{p.stem}_train{p.suffix}")
-
-        def get_val_path(src_path: str) -> str:
-            p = Path(src_path)
-            if p.stem.endswith("_val"):
-                return src_path
-            if p.stem.endswith("_train"):
-                return str(p.parent / f"{p.stem.replace('_train', '_val')}{p.suffix}")
-            return str(p.parent / f"{p.stem}_val{p.suffix}")
-
-        train_datasets = [
-            TokenDataset(get_train_path(src.path), block_size=config.data.block_size)
-            for src in config.data.sources
-        ]
-        val_datasets = [
-            TokenDataset(get_val_path(src.path), block_size=config.data.block_size)
-            for src in config.data.sources
-        ]
-        weights = [src.weight for src in config.data.sources]
-
-        train_dataset = MixtureDataset(train_datasets, weights, seed=seed)
-        val_dataset = MixtureDataset(val_datasets, weights, seed=seed)
-
-    else:
-        train_dataset = TokenDataset(data_dir / "train.bin", block_size=config.data.block_size)
-        val_dataset = TokenDataset(data_dir / "val.bin", block_size=config.data.block_size)
-
+    train_dataset, val_dataset = build_datasets(config, seed)
     use_curriculum = config.data.curriculum.enabled and world_size == 1
-    train_sampler: Sampler
-    if world_size > 1:
-        train_sampler = DistributedSampler(train_dataset, shuffle=True)
-    elif use_curriculum:
-        train_sampler = CurriculumSampler(
-            train_dataset,
-            num_stages=config.data.curriculum.num_stages,
-            schedule=config.data.curriculum.schedule,
-            seed=seed,
-        )
-    else:
-        train_sampler = RandomSampler(
-            train_dataset, replacement=True, num_samples=len(train_dataset)
-        )
-    val_sampler: DistributedSampler[TokenDataset | MixtureDataset] | None = (
-        DistributedSampler(val_dataset, shuffle=False) if world_size > 1 else None
-    )
-
-    num_workers = 0 if device_type == "mps" else 4
-    train_loader: DataLoader[tuple[torch.Tensor, torch.Tensor]] = DataLoader(
+    train_loader, val_loader, train_sampler = build_dataloaders(
+        config,
         train_dataset,
-        batch_size=config.data.batch_size,
-        sampler=train_sampler,
-        num_workers=num_workers,
-        pin_memory=(device_type == "cuda"),
-        persistent_workers=(num_workers > 0),
-    )
-    val_loader: DataLoader[tuple[torch.Tensor, torch.Tensor]] = DataLoader(
         val_dataset,
-        batch_size=config.data.batch_size,
-        sampler=val_sampler,
-        shuffle=False,
-        num_workers=num_workers,
-        pin_memory=(device_type == "cuda"),
-        persistent_workers=(num_workers > 0),
+        seed,
+        world_size,
+        device_type,
     )
 
     @torch.no_grad()
@@ -311,7 +234,7 @@ def train(config_path: str | Path) -> None:
     current_epoch = 0
     last_gns: float | None = None
     train_iter = iter(train_loader)
-    _set_sampler_epoch(train_sampler, current_epoch)
+    set_sampler_epoch(train_sampler, current_epoch)
 
     total_epochs = max(1, config.training.max_iters // len(train_loader))
 
@@ -320,12 +243,12 @@ def train(config_path: str | Path) -> None:
             batch_x, batch_y = next(train_iter)
         except StopIteration:
             current_epoch += 1
-            _set_sampler_epoch(train_sampler, current_epoch)
+            set_sampler_epoch(train_sampler, current_epoch)
             if use_curriculum:
                 new_stage = get_curriculum_stage(
                     current_epoch, total_epochs, config.data.curriculum.num_stages
                 )
-                _set_sampler_stage(train_sampler, new_stage)
+                set_sampler_stage(train_sampler, new_stage)
             train_iter = iter(train_loader)
             batch_x, batch_y = next(train_iter)
 
@@ -426,7 +349,7 @@ def train(config_path: str | Path) -> None:
                     batch_x, batch_y = next(train_iter)
                 except StopIteration:
                     current_epoch += 1
-                    _set_sampler_epoch(train_sampler, current_epoch)
+                    set_sampler_epoch(train_sampler, current_epoch)
                     train_iter = iter(train_loader)
                     batch_x, batch_y = next(train_iter)
                 batch_x, batch_y = batch_x.to(device), batch_y.to(device)
