@@ -33,23 +33,23 @@ def _assert_no_imports(paths: list[Path], *, banned_prefixes: tuple[str, ...]) -
 
 def test_modules_are_pure() -> None:
     """foundry/modules/ should not import from cli, train, or config."""
-    modules = sorted(Path("foundry/modules").glob("*.py"))
+    modules = sorted(Path("src/foundry/modules").glob("*.py"))
     _assert_no_imports(modules, banned_prefixes=("foundry.cli", "foundry.train", "foundry.config"))
 
 
 def test_data_does_not_import_train() -> None:
     """foundry/data/ should not import training loop."""
-    data = sorted(Path("foundry/data").glob("*.py"))
+    data = sorted(Path("src/foundry/data").glob("*.py"))
     _assert_no_imports(data, banned_prefixes=("foundry.train",))
 
 
 def test_model_is_standalone() -> None:
     """foundry/model.py should not import from cli, train, or data."""
-    model = [Path("foundry/model.py")]
+    model = [Path("src/foundry/model.py")]
     _assert_no_imports(model, banned_prefixes=("foundry.cli", "foundry.train", "foundry.data"))
 
 
 def test_cli_does_not_import_modules_internals() -> None:
     """foundry/cli/ should not reach into modules/ internals (use model.py)."""
-    cli = sorted(Path("foundry/cli").glob("*.py"))
+    cli = sorted(Path("src/foundry/cli").glob("*.py"))
     _assert_no_imports(cli, banned_prefixes=("foundry.modules.",))
