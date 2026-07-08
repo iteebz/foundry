@@ -29,7 +29,6 @@ from foundry.distributed import (
     print_distributed_info,
     wrap_model_distributed,
 )
-from foundry.eval import evaluate
 from foundry.metrics import MetricLogger
 from foundry.model import GPT
 
@@ -386,16 +385,6 @@ def train(config_path: str | Path) -> None:
 
         if iter_num > config.training.max_iters:
             break
-
-    if master_process:
-        val_iter = ((x.to(device), y.to(device)) for x, y in val_loader)
-        evaluate(
-            raw_model,
-            val_iter,
-            max_iters=config.training.eval_iters,
-            device=device,
-            ctx=ctx,
-        )
 
     cleanup_distributed()
 

@@ -86,7 +86,7 @@ class GPTConfig:
         if self.activation not in ["swiglu", "gelu", "glu"]:
             raise ValueError(f"Unknown activation: {self.activation}")
 
-        if self.loss_type not in ["cross_entropy", "focal", "label_smoothing", "dpo"]:
+        if self.loss_type not in ["cross_entropy", "focal", "label_smoothing"]:
             raise ValueError(f"Unknown loss_type: {self.loss_type}")
 
         if self.attention_type not in ["gqa", "mla"]:

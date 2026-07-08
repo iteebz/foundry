@@ -5,20 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from foundry.data.filter import dedupe, length_filter
 from foundry.data.pack import compute_packing_efficiency, load_bin, pack_sequences, pack_to_bin
-
-
-def test_dedupe():
-    texts = ["a", "b", "a", "c", "b"]
-    result = list(dedupe(iter(texts)))
-    assert result == ["a", "b", "c"]
-
-
-def test_length_filter():
-    texts = ["a", "ab", "abc", "abcd"]
-    result = list(length_filter(iter(texts), min_len=2, max_len=3))
-    assert result == ["ab", "abc"]
 
 
 def test_pack_roundtrip():

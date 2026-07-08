@@ -43,30 +43,6 @@ def train_cmd(
     subprocess.run([sys.executable, "-m", "foundry.train", config])  # noqa: S603
 
 
-@app.command("eval")
-def eval_cmd(
-    checkpoint: str = typer.Argument(..., help="Path to checkpoint"),
-    task: str = typer.Option("constitution", "--task", "-t", help="Benchmark task"),
-    samples: int = typer.Option(100, "--samples", "-n", help="Max samples"),
-):
-    """Run evaluation benchmarks."""
-    import subprocess
-    import sys
-
-    subprocess.run(  # noqa: S603
-        [
-            sys.executable,
-            "-m",
-            "foundry.eval",
-            checkpoint,
-            "--task",
-            task,
-            "--samples",
-            str(samples),
-        ]
-    )
-
-
 def main():
     app()
 

@@ -12,10 +12,8 @@ from .filter import (
     PerplexityFilter,
     RepetitionFilter,
     URLDensityFilter,
-    dedupe,
     default_filters,
     filter_samples,
-    length_filter,
 )
 from .pack import compute_packing_efficiency, load_bin, pack_sequences, pack_to_bin
 
@@ -35,10 +33,8 @@ __all__ = [
     "TokenDataset",
     "URLDensityFilter",
     "compute_packing_efficiency",
-    "dedupe",
     "default_filters",
     "filter_samples",
-    "length_filter",
     "load_bin",
     "pack_sequences",
     "pack_to_bin",
