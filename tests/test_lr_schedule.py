@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from foundry.train import get_lr
+from foundry.train_common import get_lr
 
 
 @dataclass

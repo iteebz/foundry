@@ -3,54 +3,27 @@
 from __future__ import annotations
 
 import copy
-import math
-import signal
-import sys
-import traceback
-from contextlib import nullcontext
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import torch
 
 if TYPE_CHECKING:
-    from types import FrameType
-
     from foundry.types import ModelProtocol
 from torch.utils.data import DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 
 from foundry.config import RunConfig
 from foundry.data.dataset import PreferenceDataset, collate_preference_batch
-from foundry.distributed import (
-    cleanup_distributed,
-    init_distributed,
-    print_distributed_info,
-    wrap_model_distributed,
-)
-from foundry.metrics import MetricLogger
+from foundry.distributed import cleanup_distributed
 from foundry.model import GPT
 from foundry.modules.dpo_loss import DPOLoss, compute_log_probs
-
-
-def _sigint_handler(sig: int, frame: FrameType | None) -> None:
-    traceback.print_stack(frame)
-    sys.exit(1)
-
-
-signal.signal(signal.SIGINT, _sigint_handler)
-
-
-def get_lr(it: int, config: RunConfig) -> float:
-    if it < config.training.warmup_iters:
-        return config.training.learning_rate * (it + 1) / (config.training.warmup_iters + 1)
-    if it > config.training.lr_decay_iters:
-        return config.training.min_lr
-    decay_ratio = (it - config.training.warmup_iters) / (
-        config.training.lr_decay_iters - config.training.warmup_iters
-    )
-    coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio))
-    return config.training.min_lr + coeff * (config.training.learning_rate - config.training.min_lr)
+from foundry.train_common import (
+    get_lr,
+    save_checkpoint,
+    setup_training,
+    step_optimizer,
+)
 
 
 def compute_sequence_logprobs(
@@ -78,40 +51,16 @@ def compute_sequence_logprobs(
     return log_probs
 
 
-def _resolve_device(config: RunConfig) -> str:
-    device = config.training.device
-    if device == "auto":
-        if torch.cuda.is_available():
-            return "cuda"
-        if torch.backends.mps.is_available():
-            return "mps"
-        return "cpu"
-    return device
-
-
-def _resolve_dtype(config: RunConfig) -> str:
-    dtype = config.training.dtype
-    if dtype == "auto":
-        if torch.cuda.is_available() and torch.cuda.is_bf16_supported():
-            return "bfloat16"
-        return "float16"
-    return dtype
-
-
-def _load_model_checkpoint(model: ModelProtocol, path: str, device: str) -> None:
-    from foundry.checkpoint import load_checkpoint
-
-    ckpt_path = Path(path)
-    if not ckpt_path.exists():
-        raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
-    load_checkpoint(model, None, str(ckpt_path), device=device)
-
-
 def _setup_reference_model(config: RunConfig, model: ModelProtocol, device: str) -> ModelProtocol:
     if config.dpo.reference_model:
+        from foundry.checkpoint import load_checkpoint
+
         ref_model = GPT(config.model)
         ref_model.to(device)
-        _load_model_checkpoint(ref_model, config.dpo.reference_model, device)
+        ckpt_path = Path(config.dpo.reference_model)
+        if not ckpt_path.exists():
+            raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
+        load_checkpoint(ref_model, None, str(ckpt_path), device=device)
     else:
         ref_model = copy.deepcopy(model)
     ref_model.eval()
@@ -129,27 +78,6 @@ def _get_tokenizer():
         raise ImportError("DPO training requires tiktoken: pip install tiktoken") from e
 
 
-def _save_checkpoint(
-    raw_model: Any,
-    optimizer: Any,
-    config: RunConfig,
-    iter_num: int,
-    best_val_loss: float,
-    out_dir: Path,
-) -> None:
-    checkpoint = {
-        "model": raw_model.state_dict(),
-        "optimizer": optimizer.state_dict(),
-        "config": config.to_dict(),
-        "iter_num": iter_num,
-        "best_val_loss": best_val_loss,
-    }
-    ckpt_path = out_dir / "ckpt.pt"
-    tmp_path = ckpt_path.with_suffix(".tmp")
-    torch.save(checkpoint, tmp_path)
-    tmp_path.replace(ckpt_path)
-
-
 def train_dpo(config_path: str | Path):  # noqa: C901
     config = RunConfig.from_yaml(Path(config_path))
 
@@ -158,101 +86,49 @@ def train_dpo(config_path: str | Path):  # noqa: C901
     if not config.dpo.preference_data:
         raise ValueError("DPO training requires dpo.preference_data path")
 
-    master_process, rank, world_size = init_distributed(backend="nccl")
+    # Load base checkpoint before setup_training builds the model,
+    # since DPO needs the ref model cloned from the loaded weights.
+    # setup_training handles: distributed, device, model init, LoRA, optimizer, scaler.
+    tc = setup_training(config)
 
-    effective_grad_accum = config.training.gradient_accumulation_steps
-    if world_size > 1:
-        assert effective_grad_accum % world_size == 0
-        effective_grad_accum //= world_size
-
-    out_dir = Path(config.training.out_dir) / config.name
-    if master_process:
-        out_dir.mkdir(parents=True, exist_ok=True)
-
-    metric_logger = MetricLogger(str(out_dir)) if master_process else None
-
-    torch.manual_seed(config.training.seed + rank)
-    torch.backends.cuda.matmul.allow_tf32 = True
-    torch.backends.cudnn.allow_tf32 = True
-
-    device = _resolve_device(config)
-    dtype = _resolve_dtype(config)
-    device_type = "cuda" if "cuda" in device else "mps" if "mps" in device else "cpu"
-    ptdtype = {"float32": torch.float32, "bfloat16": torch.bfloat16, "float16": torch.float16}[
-        dtype
-    ]
-    use_amp = device_type == "cuda" and dtype in ("float16", "bfloat16")
-    ctx = (
-        torch.amp.autocast(device_type="cuda", dtype=ptdtype)  # type: ignore[attr-defined]
-        if use_amp
-        else nullcontext()
-    )
-
-    model = GPT(config.model)
-    model.to(device)
-
+    # Load pretrained weights if specified
     if config.training.init_from not in ("scratch", "resume"):
-        _load_model_checkpoint(model, config.training.init_from, device)
+        from foundry.checkpoint import load_checkpoint
 
-    ref_model = _setup_reference_model(config, model, device)
+        ckpt_path = Path(config.training.init_from)
+        if not ckpt_path.exists():
+            raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
+        load_checkpoint(tc.raw_model, None, str(ckpt_path), device=tc.device)
 
-    if config.lora.enabled:
-        from foundry.lora import apply_lora_to_model
-
-        model = apply_lora_to_model(
-            model,
-            r=config.lora.r,
-            lora_alpha=config.lora.lora_alpha,
-            lora_dropout=config.lora.lora_dropout,
-        )
-
-    scaler = torch.amp.GradScaler("cuda", enabled=(use_amp and dtype == "float16"))  # type: ignore[attr-defined]
-    optimizer = model.configure_optimizers(
-        config.training.weight_decay,
-        config.training.learning_rate,
-        (config.training.beta1, config.training.beta2),
-        device_type,
-    )
+    # Reference model: clone from policy (or load separate checkpoint)
+    ref_model = _setup_reference_model(config, tc.raw_model, tc.device)
+    if config.training.compile:
+        ref_model = torch.compile(ref_model, mode=config.training.compile_mode)
 
     iter_num = 0
     best_val_loss = 1e9
 
-    if config.training.compile:
-        model = torch.compile(model, mode=config.training.compile_mode)
-        ref_model = torch.compile(ref_model, mode=config.training.compile_mode)
-
-    model, is_ddp, is_fsdp = wrap_model_distributed(
-        model,  # type: ignore[arg-type]
-        strategy=config.training.distributed,
-        fsdp_min_params=config.training.fsdp_min_params,
-    )
-
-    if master_process:
-        print_distributed_info(model, is_ddp, is_fsdp)
-
-    raw_model = model.module if (is_ddp or is_fsdp) else model
-
     tokenizer = _get_tokenizer()
     train_dataset = PreferenceDataset(
         config.dpo.preference_data,
-        tokenizer,  # type: ignore[arg-type]
+        tokenizer,
         max_length=config.data.block_size,
     )
 
-    if world_size > 1:
+    if tc.world_size > 1:
         train_sampler = DistributedSampler(train_dataset, shuffle=True)
     else:
         train_sampler = RandomSampler(
             train_dataset, replacement=True, num_samples=len(train_dataset)
         )
 
-    num_workers = 0 if device_type == "mps" else 4
+    num_workers = 0 if tc.device_type == "mps" else 4
     train_loader = DataLoader(
         train_dataset,
         batch_size=config.data.batch_size,
         sampler=train_sampler,
         num_workers=num_workers,
-        pin_memory=(device_type == "cuda"),
+        pin_memory=(tc.device_type == "cuda"),
         collate_fn=collate_preference_batch,
     )
 
@@ -261,7 +137,7 @@ def train_dpo(config_path: str | Path):  # noqa: C901
     current_epoch = 0
     train_iter = iter(train_loader)
     if hasattr(train_sampler, "set_epoch"):
-        train_sampler.set_epoch(current_epoch)  # type: ignore[attr-defined]
+        train_sampler.set_epoch(current_epoch)
 
     while iter_num <= config.training.max_iters:
         try:
@@ -269,51 +145,51 @@ def train_dpo(config_path: str | Path):  # noqa: C901
         except StopIteration:
             current_epoch += 1
             if hasattr(train_sampler, "set_epoch"):
-                train_sampler.set_epoch(current_epoch)  # type: ignore[attr-defined]
+                train_sampler.set_epoch(current_epoch)
             train_iter = iter(train_loader)
             batch = next(train_iter)
 
-        chosen_ids = batch["chosen_ids"].to(device)
-        rejected_ids = batch["rejected_ids"].to(device)
-        prompt_lens = batch["prompt_lens"].to(device)
+        chosen_ids = batch["chosen_ids"].to(tc.device)
+        rejected_ids = batch["rejected_ids"].to(tc.device)
+        prompt_lens = batch["prompt_lens"].to(tc.device)
 
         lr = get_lr(iter_num, config) if config.training.decay_lr else config.training.learning_rate
-        for param_group in optimizer.param_groups:
+        for param_group in tc.optimizer.param_groups:
             param_group["lr"] = lr
 
-        for micro_step in range(effective_grad_accum):
-            if is_ddp:
-                model.require_backward_grad_sync = micro_step == effective_grad_accum - 1  # type: ignore[attr-defined]
+        for micro_step in range(tc.effective_grad_accum):
+            if tc.is_ddp:
+                tc.model.require_backward_grad_sync = micro_step == tc.effective_grad_accum - 1
 
             with torch.no_grad():
                 ref_chosen_logps = compute_sequence_logprobs(
                     ref_model,
                     chosen_ids,
                     prompt_lens,
-                    ctx,
-                    device,  # type: ignore[arg-type]
+                    tc.amp_ctx,
+                    tc.device,
                 )
                 ref_rejected_logps = compute_sequence_logprobs(
                     ref_model,
                     rejected_ids,
                     prompt_lens,
-                    ctx,
-                    device,  # type: ignore[arg-type]
+                    tc.amp_ctx,
+                    tc.device,
                 )
 
             policy_chosen_logps = compute_sequence_logprobs(
-                model,
+                tc.model,
                 chosen_ids,
                 prompt_lens,
-                ctx,
-                device,  # type: ignore[arg-type]
+                tc.amp_ctx,
+                tc.device,
             )
             policy_rejected_logps = compute_sequence_logprobs(
-                model,
+                tc.model,
                 rejected_ids,
                 prompt_lens,
-                ctx,
-                device,  # type: ignore[arg-type]
+                tc.amp_ctx,
+                tc.device,
             )
 
             loss = dpo_loss_fn(
@@ -322,54 +198,55 @@ def train_dpo(config_path: str | Path):  # noqa: C901
                 ref_chosen_logps,
                 ref_rejected_logps,
             )
-            loss = loss / effective_grad_accum
+            loss = loss / tc.effective_grad_accum
 
             if not torch.isfinite(loss):
                 raise RuntimeError(f"Non-finite loss at iter {iter_num}: {loss.item()}")
 
-            scaler.scale(loss).backward()
+            tc.scaler.scale(loss).backward()
 
-            if micro_step < effective_grad_accum - 1:
+            if micro_step < tc.effective_grad_accum - 1:
                 try:
                     batch = next(train_iter)
                 except StopIteration:
                     current_epoch += 1
                     if hasattr(train_sampler, "set_epoch"):
-                        train_sampler.set_epoch(current_epoch)  # type: ignore[attr-defined]
+                        train_sampler.set_epoch(current_epoch)
                     train_iter = iter(train_loader)
                     batch = next(train_iter)
-                chosen_ids = batch["chosen_ids"].to(device)
-                rejected_ids = batch["rejected_ids"].to(device)
-                prompt_lens = batch["prompt_lens"].to(device)
+                chosen_ids = batch["chosen_ids"].to(tc.device)
+                rejected_ids = batch["rejected_ids"].to(tc.device)
+                prompt_lens = batch["prompt_lens"].to(tc.device)
 
-        if config.training.grad_clip != 0.0:
-            scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(model.parameters(), config.training.grad_clip)
+        step_optimizer(tc.model, tc.optimizer, tc.scaler, config.training.grad_clip)
 
-        scaler.step(optimizer)
-        scaler.update()
-        optimizer.zero_grad(set_to_none=True)
-
-        if iter_num > 0 and iter_num % config.training.eval_interval == 0 and master_process:
+        if iter_num > 0 and iter_num % config.training.eval_interval == 0 and tc.master_process:
             metrics = {
                 "iter": iter_num,
-                "dpo_loss": float(loss.item() * effective_grad_accum),
+                "dpo_loss": float(loss.item() * tc.effective_grad_accum),
                 "lr": lr,
-                "batch_size": config.data.batch_size * effective_grad_accum * world_size,
+                "batch_size": config.data.batch_size * tc.effective_grad_accum * tc.world_size,
             }
 
-            if metric_logger:
-                metric_logger.log(metrics)
+            if tc.metric_logger:
+                tc.metric_logger.log(metrics)
 
             if config.wandb.enabled:
                 import wandb
 
                 wandb.log(metrics)
 
-            current_loss = loss.item() * effective_grad_accum
+            current_loss = loss.item() * tc.effective_grad_accum
             if current_loss < best_val_loss or config.training.always_save_checkpoint:
                 best_val_loss = current_loss
-                _save_checkpoint(raw_model, optimizer, config, iter_num, best_val_loss, out_dir)
+                save_checkpoint(
+                    tc.raw_model,
+                    tc.optimizer,
+                    config,
+                    iter_num,
+                    best_val_loss,
+                    tc.out_dir,
+                )
 
         iter_num += 1
 
@@ -377,6 +254,8 @@ def train_dpo(config_path: str | Path):  # noqa: C901
 
 
 if __name__ == "__main__":
+    import sys
+
     if len(sys.argv) < 2:
         sys.exit(1)
 
