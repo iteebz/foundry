@@ -332,14 +332,6 @@ class GPT(nn.Module):
         extra_args = {"fused": True} if use_fused else {}
         return torch.optim.AdamW(optim_groups, lr=learning_rate, betas=betas, **extra_args)
 
-    @classmethod
-    def from_pretrained(
-        cls, model_type: str, override_args: dict[str, object] | None = None
-    ) -> GPT:
-        raise NotImplementedError(
-            "model_v2 doesn't support pretrained loading (no learned pos embeddings)"
-        )
-
     @torch.inference_mode()
     def generate(
         self,
