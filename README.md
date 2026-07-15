@@ -49,6 +49,17 @@ foundry/
 
 the interesting part isn't this repo. it's what built it.
 
+## status: paused (jul 2026)
+
+no gpu access, no active runs. becomes relevant if fundraising lands compute.
+
+simplification sweep done (290 tests green): deleted zero-caller modules, shadow filter fns, dead config enums.
+
+**known cuts on restart:**
+1. `train.py`/`train_dpo.py` share ~200 duplicated lines — extract shared training preamble
+2. `generate.py:load_checkpoint` duplicates `checkpoint.py:load_checkpoint` + carries legacy nanoGPT key-rename shim
+3. `TokenDataset` memmap/streaming dual-mode: `_init_*` paths near-identical, unify
+
 ## license
 
 Apache 2.0
