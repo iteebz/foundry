@@ -78,3 +78,57 @@ def test_extract_answer_math():
 
 def test_extract_answer_multiple_choice():
     assert extract_answer("The answer is B", task_type="multiple_choice") == "B"
+
+
+def test_extract_answer_math_hash_takes_last_match():
+    # multiple #### markers: the LAST wins (final answer after reasoning steps)
+    assert extract_answer("#### 5\n#### 42", task_type="math") == "42"
+
+
+def test_extract_answer_math_hash_precedes_bare_number():
+    # #### marker beats any bare number appearing earlier in the text
+    assert extract_answer("step gives 100\n#### 7", task_type="math") == "7"
+
+
+def test_extract_answer_math_answer_is_fallback():
+    # no #### -> "answer is"/"equals" phrase, last match
+    assert extract_answer("it equals 7", task_type="math") == "7"
+    assert extract_answer("first answer is 3, final answer is 9", task_type="math") == "9"
+
+
+def test_extract_answer_math_bare_number_last_resort():
+    # no marker, no phrase -> last bare number in text
+    assert extract_answer("result 3 then 9", task_type="math") == "9"
+
+
+def test_extract_answer_math_strips_commas_keeps_dots():
+    assert extract_answer("#### 1,234,567", task_type="math") == "1234567"
+    assert extract_answer("#### 3.14", task_type="math") == "3.14"
+
+
+def test_extract_answer_math_none_when_no_number():
+    assert extract_answer("nothing here", task_type="math") is None
+
+
+def test_extract_answer_mc_first_match_wins():
+    # multiple choice returns the FIRST isolated A-D letter, not the last
+    assert extract_answer("C or D", task_type="multiple_choice") == "C"
+
+
+def test_extract_answer_mc_requires_word_boundary():
+    # a letter embedded in a word is not an answer
+    assert extract_answer("BANANA", task_type="multiple_choice") is None
+
+
+def test_extract_answer_mc_uppercases_input():
+    # lowercase choice still resolves
+    assert extract_answer("the answer is c", task_type="multiple_choice") == "C"
+
+
+def test_extract_answer_mc_none_when_no_letter():
+    assert extract_answer("no letters", task_type="multiple_choice") is None
+
+
+def test_extract_answer_unknown_task_type_returns_none():
+    # only "math" and "multiple_choice" are handled
+    assert extract_answer("42", task_type="other") is None
