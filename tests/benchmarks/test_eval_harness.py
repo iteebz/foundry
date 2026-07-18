@@ -51,6 +51,45 @@ def test_compute_aggregate_metrics():
     assert 0.0 <= agg["mean_score"] <= 1.0
 
 
+def test_compute_aggregate_metrics_empty_results_is_zero_not_nan():
+    # no tasks -> division by zero would raise; must floor to 0.0
+    agg = compute_aggregate_metrics({})
+    assert agg == {"mean_score": 0.0, "num_tasks": 0}
+
+
+def test_compute_aggregate_metrics_error_only_task_excluded():
+    # a task that only produced an error dict has no "accuracy" key -> excluded
+    results = {"gsm8k": {"error": "OOM"}}
+    agg = compute_aggregate_metrics(results)
+    assert agg == {"mean_score": 0.0, "num_tasks": 0}
+
+
+def test_compute_aggregate_metrics_constitution_task_counted():
+    # constitution uses "preference_accuracy", a distinct key from "accuracy"
+    results = {"constitution": {"preference_accuracy": 0.8}}
+    agg = compute_aggregate_metrics(results)
+    assert agg == {"mean_score": 0.8, "num_tasks": 1}
+
+
+def test_compute_aggregate_metrics_partial_subset_averages_only_present():
+    # only gsm8k and constitution ran; mmlu/humaneval absent must not count as 0
+    results = {
+        "gsm8k": {"accuracy": 1.0},
+        "constitution": {"preference_accuracy": 0.0},
+    }
+    agg = compute_aggregate_metrics(results)
+    assert agg["num_tasks"] == 2
+    assert agg["mean_score"] == 0.5
+
+
+def test_compute_aggregate_metrics_unknown_task_key_ignored():
+    # "aggregate" or any unrecognized task name must not be picked up
+    results = {"gsm8k": {"accuracy": 0.5}, "aggregate": {"mean_score": 0.9}}
+    agg = compute_aggregate_metrics(results)
+    assert agg["num_tasks"] == 1
+    assert agg["mean_score"] == 0.5
+
+
 def test_save_eval_results():
     with tempfile.TemporaryDirectory() as tmpdir:
         output_path = Path(tmpdir) / "results.json"
