@@ -9,7 +9,10 @@ from . import (
     mutate_adam_betas,
     mutate_attention,
     mutate_batch_size,
+    mutate_constitution,
     mutate_conversation_format,
+    mutate_curriculum,
+    mutate_data_filter,
     mutate_depth,
     mutate_dpo,
     mutate_grad_clip,
@@ -217,6 +220,42 @@ def dpo(
 ):
     """Mutate to Direct Preference Optimization training."""
     path = save_mutation(mutate_dpo(beta, label_smoothing))
+    typer.echo(f"\nGenerated: {path}")
+    typer.echo(f"Run with: python -m foundry.train {path}")
+
+
+@app.command()
+def data_filter(
+    min_len: Annotated[int, typer.Argument(help="Minimum sequence length")],
+    max_len: Annotated[int | None, typer.Argument(help="Maximum sequence length")] = None,
+    no_dedupe: Annotated[bool, typer.Option("--no-dedupe", help="Disable deduplication")] = False,
+):
+    """Mutate data filtering parameters."""
+    path = save_mutation(mutate_data_filter(min_len, max_len, dedupe=not no_dedupe))
+    typer.echo(f"\nGenerated: {path}")
+    typer.echo(f"Run with: python -m foundry.train {path}")
+
+
+@app.command()
+def curriculum(
+    strategy: Annotated[str, typer.Argument(help="length|perplexity")] = "length",
+    schedule: Annotated[str, typer.Argument(help="linear|step")] = "linear",
+    num_stages: Annotated[int, typer.Argument(help="Number of curriculum stages")] = 4,
+):
+    """Mutate to curriculum learning."""
+    path = save_mutation(mutate_curriculum(strategy, schedule, num_stages))
+    typer.echo(f"\nGenerated: {path}")
+    typer.echo(f"Run with: python -m foundry.train {path}")
+
+
+@app.command()
+def constitution(
+    constitution_path: Annotated[
+        str, typer.Argument(help="Path to constitution JSONL (preference pairs)")
+    ],
+):
+    """Mutate to constitution injection training."""
+    path = save_mutation(mutate_constitution(constitution_path))
     typer.echo(f"\nGenerated: {path}")
     typer.echo(f"Run with: python -m foundry.train {path}")
 
