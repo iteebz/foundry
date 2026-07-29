@@ -3,7 +3,7 @@
 
 import typer
 
-from foundry.cli import compare, sweep, synthetic
+from foundry.cli import compare, eval, sweep, synthetic
 from foundry.cli.lr_finder import lr_find_from_config
 
 app = typer.Typer(
@@ -13,6 +13,7 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
+app.add_typer(eval.app, name="eval", help="Evaluate checkpoints against benchmarks")
 app.add_typer(sweep.app, name="sweep", help="Run parallel mutation sweeps")
 app.add_typer(synthetic.app, name="synthetic", help="Generate synthetic training data")
 app.add_typer(compare.app, name="compare", help="A/B test baseline vs mutation")
