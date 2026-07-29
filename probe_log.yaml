@@ -31,6 +31,15 @@
 # ci: green
 
 iterations:
+  - iteration: 2
+    spawn: feynman/s/1bdc0c38
+    date: 2026-07-29
+    capability_added: wire data-filter, curriculum, constitution CLI commands — three mutation types in __all__ with zero CLI reachability
+    files_changed:
+      - src/foundry/mutate/__main__.py
+    ci: pass
+    notes: same gap pattern as iter1 (dpo). mutate_data_filter/mutate_curriculum/mutate_constitution all existed in data.py and __all__ but had no CLI entry points. 328 tests pass. generated configs verified for all three. baseline comment incorrectly lists data_filter in the 22 baseline types — it was in code but unreachable, so effective CLI surface was 21.
+
   - iteration: 1
     spawn: zuko/s/4e5ec06b
     date: 2026-07-29
