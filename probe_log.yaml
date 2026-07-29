@@ -31,6 +31,16 @@
 # ci: green
 
 iterations:
+  - iteration: 3
+    spawn: feynman/s/1bdc0c38
+    date: 2026-07-29
+    capability_added: wire foundry CLI eval subcommand — benchmark harness (gsm8k/mmlu/humaneval/constitution) was built but had zero CLI reachability
+    files_changed:
+      - src/foundry/cli/eval.py
+      - src/foundry/cli/main.py
+    ci: pass
+    notes: run_benchmark_suite existed in benchmarks/harness.py with full HF+local dataset support. no __main__.py in benchmarks/, no eval subcommand in cli/main.py. added cli/eval.py with run command (tasks, max-samples, output, dataset-dir, device flags) and wired into main app. 328 tests pass.
+
   - iteration: 2
     spawn: feynman/s/1bdc0c38
     date: 2026-07-29
