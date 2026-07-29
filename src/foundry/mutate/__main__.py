@@ -11,6 +11,7 @@ from . import (
     mutate_batch_size,
     mutate_conversation_format,
     mutate_depth,
+    mutate_dpo,
     mutate_grad_clip,
     mutate_lora_alpha,
     mutate_lora_dropout,
@@ -205,6 +206,17 @@ def sparse_attention(
 ):
     """Mutate to sparse attention."""
     path = save_mutation(mutate_sparse_attention(block_size, stride))
+    typer.echo(f"\nGenerated: {path}")
+    typer.echo(f"Run with: python -m foundry.train {path}")
+
+
+@app.command()
+def dpo(
+    beta: Annotated[float, typer.Argument(help="DPO temperature (default: 0.1)")] = 0.1,
+    label_smoothing: Annotated[float, typer.Argument(help="Label smoothing (default: 0.0)")] = 0.0,
+):
+    """Mutate to Direct Preference Optimization training."""
+    path = save_mutation(mutate_dpo(beta, label_smoothing))
     typer.echo(f"\nGenerated: {path}")
     typer.echo(f"Run with: python -m foundry.train {path}")
 

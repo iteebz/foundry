@@ -1,0 +1,41 @@
+# foundry target-transfer probe log
+# one entry per iteration (spawn). append, never edit prior entries.
+# read this before working on foundry to see what prior spawns did and avoid duplication.
+# append your entry AFTER running CI green.
+#
+# entry shape:
+#   iteration: N
+#   spawn: <agent>/<spawn_id>
+#   date: YYYY-MM-DD
+#   capability_added: one-line description of the real capability added
+#   files_changed: [list]
+#   ci: pass | fail
+#   notes: optional — what you tried, what you found
+#
+# kill conditions (from specs/external-referee-run.md):
+#   - hygiene-only gains (lint, formatting, test shuffling) do not count as capability
+#   - if 3 consecutive iterations produce hygiene-only, probe is inconclusive on yield
+#
+# what counts as capability:
+#   - new mutation type (adds to the 22 existing)
+#   - improved benchmark harness (better eval coverage)
+#   - new architecture module (adds to modules/)
+#   - improved sweep/ranking logic
+#   - new data pipeline feature
+#
+# iteration 0: baseline
+# mutation types: 22 (attention, depth, width, lr, norm, activation, position, loss,
+#   batch_size, warmup, grad_clip, data_filter, weight_decay, adam_betas, lora_rank,
+#   lora_alpha, lora_dropout, conversation_format, mla, moe, sliding_window, sparse_attention)
+# tests: 328 passing
+# ci: green
+
+iterations:
+  - iteration: 1
+    spawn: zuko/s/4e5ec06b
+    date: 2026-07-29
+    capability_added: wire mutate_dpo CLI command — dpo mutation type was built+tested but unreachable via `python -m foundry.mutate dpo`
+    files_changed:
+      - src/foundry/mutate/__main__.py
+    ci: pass
+    notes: mutate_dpo existed in architecture.py and __init__.py/__all__ but had no CLI entry. adam_betas pattern (two-arg command) applied. generate_sweep intentionally excluded — dpo takes beta+smoothing, not a single variant string, same contract as adam_betas.

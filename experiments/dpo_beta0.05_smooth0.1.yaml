@@ -1,0 +1,25 @@
+name: dpo_beta0.05_smooth0.1
+training:
+  seed: 1337
+  max_iters: 5000
+  learning_rate: 0.0006
+  eval_interval: 500
+  compile: false
+data:
+  dataset: tinystories
+  batch_size: 64
+  block_size: 256
+model_args:
+  n_layer: 6
+  n_head: 6
+  n_kv_head: 2
+  n_embd: 384
+  dropout: 0.0
+  bias: false
+  norm_type: rmsnorm
+  activation: swiglu
+  position_encoding: rope
+  attention_type: gqa
+  loss_type: dpo
+  dpo_beta: 0.05
+  dpo_label_smoothing: 0.1
