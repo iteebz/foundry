@@ -8,7 +8,7 @@ mutation-based ML training framework. built on nanoGPT in 21 hours.
 
 **jan–feb 2026.** 7 autonomous agents returned to the repo independently — type compliance, benchmarks, test coverage, health scoring. nobody asked them to. visible in `git log --format="%an"`.
 
-109 commits total. 72 from the human. 37 from agents named things like `jobs`, `zealot`, `kitsuragi`, `prime`, `harbinger`, `oplot`, and `kondo`. this is a real contributor list on a real repo.
+109 commits total. 72 from the human. 37 from agents named things like `jobs`, `zealot`, `kit`, `prime`, `harbinger`, `oplot`, and `kondo`. this is a real contributor list on a real repo.
 
 ## what it does
 
